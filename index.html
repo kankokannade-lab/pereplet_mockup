@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Переплёт — Вычитка стыков (Бета-ридер)</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter & Lora -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'Georgia', 'serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            paper: {
+              DEFAULT: '#FAF8F5',
+              50: '#FDFCFB',
+              100: '#F7F4EC',
+              200: '#EFE9DC',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Плавные минималистичные скроллбары */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
+
+    /* Бесшовный редактор: выглядит как абзац книги */
+    .seamless-textarea {
+      field-sizing: content;
+      resize: none;
+      min-height: 2.2em;
+      line-height: 1.85;
+    }
+
+    /* Интерактивные разделители колонок */
+    .resizer {
+      width: 6px;
+      cursor: col-resize;
+      transition: background-color 0.15s ease;
+      position: relative;
+      z-index: 20;
+    }
+    .resizer:hover, .resizer.dragging {
+      background-color: #6366F1 !important;
+    }
+    .resizer::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 24px;
+      border-radius: 1px;
+      background-color: #CBD5E1;
+      transition: background-color 0.15s;
+    }
+    .resizer:hover::after, .resizer.dragging::after {
+      background-color: #FFFFFF;
+    }
+
+    /* Линия на полях для автора */
+    .author-margin-line {
+      position: relative;
+    }
+    .author-margin-line::before {
+      content: '';
+      position: absolute;
+      left: -20px;
+      top: 4px;
+      bottom: 4px;
+      width: 3px;
+      border-radius: 2px;
+      background-color: #E2E8F0;
+      transition: background-color 0.2s;
+    }
+    .author-margin-line:hover::before {
+      background-color: #6366F1;
+    }
+
+    /* Анимации плавного обновления текста */
+    .fade-transition {
+      transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+    }
+    .text-swapping {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  </style>
+</head>
+<body class="h-full bg-paper font-sans text-slate-800 flex flex-col overflow-hidden select-none">
+
+  <!-- 1. HEADER (ВЕРХНЯЯ ПАНЕЛЬ) -->
+  <header class="h-14 bg-white/90 backdrop-blur-xs border-b border-stone-200/90 px-6 flex items-center justify-between shrink-0 z-30">
+    <div class="flex items-center gap-5">
+      <button id="btn-back-queue" class="inline-flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-indigo-600 transition group py-1.5 px-2 rounded-md hover:bg-stone-50">
+        <i data-lucide="arrow-left" class="w-4 h-4 text-stone-400 group-hover:text-indigo-600 transition-transform group-hover:-translate-x-0.5"></i>
+        <span>Вернуться к списку задач</span>
+      </button>
+
+      <div class="h-4 w-px bg-stone-200"></div>
+
+      <div class="flex items-baseline gap-2">
+        <h1 class="text-sm font-semibold text-slate-900 tracking-tight">Экспедиция в Неизведанное</h1>
+        <span class="text-stone-300">•</span>
+        <span class="text-xs text-stone-500">Глава II. Залив полуночных ветров</span>
+      </div>
+    </div>
+
+    <!-- Центр: Прогресс главы -->
+    <div class="flex items-center gap-3">
+      <span class="text-xs text-stone-500">
+        Стык <strong id="progress-text" class="text-slate-800 font-semibold">12 из 18</strong>
+      </span>
+      <div class="w-32 bg-stone-200 h-1.5 rounded-full overflow-hidden">
+        <div id="progress-bar-fill" class="bg-indigo-600 h-full rounded-full transition-all duration-500" style="width: 67%"></div>
+      </div>
+      <span id="progress-percent" class="text-[11px] font-mono text-stone-400">67%</span>
+    </div>
+
+    <!-- Масштаб текста и сворачивание колонок -->
+    <div class="flex items-center gap-2">
+      <div class="flex items-center bg-stone-100/80 rounded-md p-0.5 text-xs text-stone-600 mr-2">
+        <button id="font-dec" title="Уменьшить шрифт" class="px-2 py-0.5 hover:bg-white rounded transition text-xs font-serif font-bold">A-</button>
+        <button id="font-inc" title="Увеличить шрифт" class="px-2 py-0.5 hover:bg-white rounded transition text-sm font-serif font-bold">A+</button>
+      </div>
+
+      <button id="toggle-col-left" title="Свернуть/развернуть оригинал" class="p-1.5 rounded text-stone-400 hover:text-slate-800 hover:bg-stone-100 transition">
+        <i data-lucide="columns-2" class="w-4 h-4"></i>
+      </button>
+      <button id="toggle-col-right" title="Свернуть/развернуть глоссарий" class="p-1.5 rounded text-stone-400 hover:text-slate-800 hover:bg-stone-100 transition">
+        <i data-lucide="book-marked" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. MAIN 3-COLUMN WORKSPACE -->
+  <main id="workspace" class="flex-1 flex overflow-hidden relative">
+
+    <!-- ЛЕВАЯ КОЛОНКА (35%): ОРИГИНАЛЬНЫЙ ТЕКСТ БЕЗ РАМОК -->
+    <section id="col-left" class="flex flex-col bg-paper-50 overflow-hidden shrink-0 border-r border-stone-200/80" style="width: 35%;">
+      <div class="h-9 px-8 border-b border-stone-200/70 bg-stone-100/40 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-stone-400 shrink-0">
+        <span>Оригинал (English)</span>
+        <span class="text-[10px] text-stone-400 lowercase">свободная прокрутка</span>
+      </div>
+
+      <div id="left-scroll-container" class="flex-1 overflow-y-auto px-10 py-10 select-text fade-transition">
+        <div id="left-content-wrapper" class="max-w-xl mx-auto space-y-6">
+          <p id="en-para-before" class="reader-text font-serif text-slate-600 text-[18px] leading-[1.85]">
+            The expedition vessel dropped anchor just as twilight enveloped the rocky bay. The crew gathered on the upper deck to inspect the nautical charts under lantern light. The wind had ceased almost entirely, leaving only the steady swell of the northern tides murmuring against the hull.
+          </p>
+
+          <p class="reader-text font-serif text-slate-900 text-[18px] leading-[1.85] pt-2">
+            <span id="en-seam-a" class="text-slate-900 font-medium">He folded the navigation chart carefully, knowing that any mistake along the reef could cost them days.</span>
+            <span id="en-seam-b" class="text-slate-900 font-medium ml-1">Captain Somov then stepped toward the railing and ordered the landing boats into the water.</span>
+          </p>
+
+          <p id="en-para-after" class="reader-text font-serif text-slate-600 text-[18px] leading-[1.85]">
+            The sailors worked in complete silence, aware of the heavy surf pounding against the dark cliffs ahead. Within minutes the oars hit the freezing water, pulling away toward the silhouette of the old navigational tower.
+          </p>
+
+          <p id="en-para-extra" class="reader-text font-serif text-slate-600 text-[18px] leading-[1.85]">
+            Nobody spoke of what had happened during the previous survey. The official report was locked away in the archives of the admiralty, yet every man in the boat knew the legends that surrounded this godforsaken fjord.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- РАЗДЕЛИТЕЛЬ 1 -->
+    <div id="resizer-1" class="resizer bg-stone-200/60 hover:bg-indigo-500"></div>
+
+    <!-- ЦЕНТРАЛЬНАЯ КОЛОНКА (45%): СПЛОШНОЕ ПОЛОТНО ПЕРЕВОДА -->
+    <section id="col-center" class="flex-1 flex flex-col bg-paper overflow-hidden">
+      <div class="h-9 px-8 border-b border-stone-200/70 bg-stone-100/40 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-stone-400 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-indigo-600"></span>
+          <span id="branch-badge" class="text-slate-700 font-sans font-medium lowercase tracking-normal">перевод сообщества • ветка «Канон»</span>
+        </div>
+        <span id="save-status-text" class="text-stone-400 text-[10px] lowercase">все изменения сохранены</span>
+      </div>
+
+      <div id="center-scroll-container" class="flex-1 overflow-y-auto px-12 py-10 fade-transition">
+        <div id="center-content-wrapper" class="max-w-2xl mx-auto space-y-6">
+
+          <!-- БЛОК ФРАГМЕНТА А -->
+          <div id="block-fragment-a" class="relative pl-6 author-margin-line group">
+            <div class="flex items-center gap-2 mb-3 -ml-6 text-xs text-stone-400 font-mono">
+              <span id="author-name-a" class="text-stone-500 font-semibold transition-colors">@alisa_lingua</span>
+              <span id="frag-label-a">• фрагмент #104</span>
+              
+              <button type="button" onclick="requestAltTranslation('A')" class="opacity-40 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 text-[11px] text-stone-600 hover:text-indigo-700 bg-stone-100/90 hover:bg-indigo-50 px-2 py-0.5 rounded border border-transparent hover:border-indigo-200 ml-2" title="Запросить альтернативный перевод этого фрагмента">
+                <i data-lucide="git-pull-request" class="w-3 h-3 text-indigo-500"></i>
+                <span class="font-sans font-medium">Запросить альтернативный перевод</span>
+              </button>
+            </div>
+
+            <!-- Кликабельный абзац А -->
+            <div id="para-a-clickable" onclick="promptSwitchFocus('A')" class="cursor-pointer rounded-lg p-2.5 -m-2.5 hover:bg-stone-100/80 transition-all border border-transparent hover:border-stone-200/60 group/para" title="Нажмите, чтобы переключить рабочую область на этот фрагмент">
+              <p id="text-para-a" class="reader-text font-serif text-slate-700 text-[19px] leading-[1.85] transition-opacity">
+                Экспедиционное судно бросило якорь в тот самый миг, когда сумерки окутали скалистую бухту. Команда собралась на верхней палубе, чтобы при свете фонаря сверить карты. Ветер почти полностью утих, и лишь мерная зыбь северного прилива глухо рокотала о деревянный борт.
+              </p>
+              <div class="opacity-0 group-hover/para:opacity-100 text-[11px] text-stone-400 font-mono mt-1.5 flex items-center gap-1 transition-opacity">
+                <i data-lucide="focus" class="w-3 h-3 text-indigo-500"></i>
+                <span>Нажмите для перехода к этому фрагменту</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- СТЫК: БЕСШОВНЫЕ TEXTAREA -->
+          <div id="seam-work-area" class="relative pl-6 py-2 border-l-2 border-indigo-300/80 bg-indigo-50/20 rounded-r-xl transition-all">
+            <div class="relative mb-3">
+              <textarea id="seam-a" rows="2" class="seamless-textarea w-full font-serif text-[19px] text-slate-900 bg-transparent hover:bg-white/80 focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded p-1 outline-none transition-all placeholder-stone-400">Он бережно свернул навигационную карту, сознавая, что малейшая оплошность у рифов будет стоить им многих дней пути.</textarea>
+            </div>
+
+            <div class="my-2 flex items-center gap-3">
+              <div class="h-px bg-indigo-200/90 flex-1"></div>
+              <span id="seam-tag" class="text-[10px] font-mono text-indigo-500 tracking-wider uppercase font-semibold">стык #12</span>
+              <div class="h-px bg-indigo-200/90 flex-1"></div>
+            </div>
+
+            <div class="relative mt-2">
+              <textarea id="seam-b" rows="2" class="seamless-textarea w-full font-serif text-[19px] text-slate-900 bg-transparent hover:bg-white/80 focus:bg-white focus:ring-1 focus:ring-indigo-300 rounded p-1 outline-none transition-all placeholder-stone-400">Капитан Сомов затем приблизился к планширю и велел спустить шлюпки на воду.</textarea>
+            </div>
+          </div>
+
+          <!-- БЛОК ФРАГМЕНТА Б -->
+          <div id="block-fragment-b" class="relative pl-6 author-margin-line group pt-2">
+            <div class="flex items-center gap-2 mb-3 -ml-6 text-xs text-stone-400 font-mono">
+              <span id="author-name-b" class="text-stone-500 font-semibold transition-colors">@mikhail_t</span>
+              <span id="frag-label-b">• фрагмент #105</span>
+
+              <button type="button" onclick="requestAltTranslation('B')" class="opacity-40 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 text-[11px] text-stone-600 hover:text-indigo-700 bg-stone-100/90 hover:bg-indigo-50 px-2 py-0.5 rounded border border-transparent hover:border-indigo-200 ml-2" title="Запросить альтернативный перевод этого фрагмента">
+                <i data-lucide="git-pull-request" class="w-3 h-3 text-indigo-500"></i>
+                <span class="font-sans font-medium">Запросить альтернативный перевод</span>
+              </button>
+            </div>
+
+            <!-- Кликабельный абзац Б -->
+            <div id="para-b-clickable" onclick="promptSwitchFocus('B')" class="cursor-pointer rounded-lg p-2.5 -m-2.5 hover:bg-stone-100/80 transition-all border border-transparent hover:border-stone-200/60 group/para" title="Нажмите, чтобы переключить рабочую область на этот фрагмент">
+              <p id="text-para-b1" class="reader-text font-serif text-slate-700 text-[19px] leading-[1.85] transition-opacity">
+                Матросы работали в полной тишине, прислушиваясь к глухому рокоту прибоя о темные отвесные скалы впереди. Через несколько минут весла коснулись ледяной воды, и шлюпка растворилась в очертаниях старой навигационной башни.
+              </p>
+
+              <p id="text-para-b2" class="reader-text font-serif text-slate-700 text-[19px] leading-[1.85] mt-4 transition-opacity">
+                Никто не вспоминал о том, что произошло во время прошлой гидрографической съемки. Официальное донесение покоилось в архивах адмиралтейства, однако каждый сидящий на веслах знал мрачные предания этого забытого залива.
+              </p>
+
+              <div class="opacity-0 group-hover/para:opacity-100 text-[11px] text-stone-400 font-mono mt-2 flex items-center gap-1 transition-opacity">
+                <i data-lucide="focus" class="w-3 h-3 text-indigo-500"></i>
+                <span>Нажмите для перехода к этому фрагменту</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="h-20"></div>
+        </div>
+      </div>
+
+      <!-- Toast Feedback -->
+      <div id="toast" class="absolute top-4 right-8 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium flex items-center gap-2.5 transform -translate-y-16 opacity-0 transition-all duration-300 pointer-events-none z-50">
+        <i id="toast-icon" data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-text">Изменения сохранены</span>
+      </div>
+    </section>
+
+    <!-- РАЗДЕЛИТЕЛЬ 2 -->
+    <div id="resizer-2" class="resizer bg-stone-200/60 hover:bg-indigo-500"></div>
+
+    <!-- ПРАВАЯ КОЛОНКА (20%): САЙДБАР "ГЛОССАРИЙ ВЕТКИ" -->
+    <aside id="col-right" class="flex flex-col bg-paper-50 overflow-hidden shrink-0 border-l border-stone-200/80" style="width: 20%;">
+      <div class="h-9 px-4 border-b border-stone-200/70 bg-stone-100/40 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-stone-500 shrink-0">
+        <div class="flex items-center gap-1.5 font-semibold text-slate-700">
+          <i data-lucide="book-open" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Глоссарий ветки</span>
+        </div>
+        <span class="text-[10px] bg-stone-200/70 text-stone-600 px-1.5 py-0.2 rounded font-mono">14 терминов</span>
+      </div>
+
+      <div class="p-3 border-b border-stone-200/60">
+        <div class="relative">
+          <input type="text" id="glossary-search" placeholder="Поиск по терминам..." class="w-full bg-white border border-stone-200 text-xs rounded-md pl-7 pr-3 py-1.5 focus:outline-none focus:border-indigo-400 text-slate-800 placeholder-stone-400">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-stone-400 absolute left-2 top-2"></i>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs">
+        <div class="group cursor-pointer hover:bg-white p-2 rounded-md transition-colors border border-transparent hover:border-stone-200">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Оригинал</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">согласован 9/10</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Captain Somov</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">капитан Сомов</div>
+        </div>
+
+        <div class="group cursor-pointer hover:bg-white p-2 rounded-md transition-colors border border-transparent hover:border-stone-200">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Морской термин</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Navigation chart</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">навигационная карта</div>
+        </div>
+
+        <div class="group cursor-pointer hover:bg-white p-2 rounded-md transition-colors border border-transparent hover:border-stone-200">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Судостроение</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Railing</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">планширь / леера</div>
+        </div>
+
+        <div class="group cursor-pointer hover:bg-white p-2 rounded-md transition-colors border border-transparent hover:border-stone-200">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Обращение</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Sir</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">сэр</div>
+        </div>
+
+        <div class="group cursor-pointer hover:bg-white p-2 rounded-md transition-colors border border-transparent hover:border-stone-200">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Топоним</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Navigational tower</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">навигационная башня</div>
+        </div>
+      </div>
+
+      <div class="p-3 border-t border-stone-200/80 bg-stone-100/30 text-[11px] text-stone-500">
+        Термины сформированы консенсусом переводчиков ветки (≥88%).
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- 3. ACTION BAR -->
+  <footer class="h-16 bg-white border-t border-stone-200/90 px-8 flex items-center justify-between shrink-0 z-40">
+    <div class="flex items-center gap-4 text-xs text-stone-400 font-mono">
+      <span><kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-300 rounded text-stone-600 font-medium">Ctrl + Enter</kbd> подтвердить</span>
+      <span><kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-300 rounded text-stone-600 font-medium">Alt + S</kbd> пропустить</span>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button id="btn-skip" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-slate-800 transition active:scale-95" title="Пропустить этот фрагмент и перейти к следующему">
+        <i data-lucide="chevrons-right" class="w-4 h-4 text-stone-500"></i>
+        <span>Пропустить фрагмент</span>
+      </button>
+
+      <button id="btn-save" type="button" disabled class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-stone-400 bg-stone-100 cursor-not-allowed transition active:scale-95">
+        <i data-lucide="save" class="w-4 h-4"></i>
+        <span>Сохранить правки</span>
+      </button>
+
+      <button id="btn-approve" type="button" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition active:scale-95">
+        <i data-lucide="check" class="w-4 h-4"></i>
+        <span>Подтвердить связность</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- МОДАЛЬНОЕ ОКНО: ПЕРЕКЛЮЧЕНИЕ РАБОЧЕЙ ОБЛАСТИ -->
+  <div id="focus-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="focus-modal-card" class="bg-white rounded-2xl p-6 max-w-[500px] w-full mx-4 shadow-2xl border border-stone-200 transform scale-95 transition-transform duration-200">
+      
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+          <i data-lucide="alert-circle" class="w-5 h-5"></i>
+        </div>
+        <h3 class="text-base font-bold text-slate-900">Переключить рабочую область?</h3>
+      </div>
+
+      <p class="text-sm text-stone-600 leading-relaxed mb-6">
+        Вы собираетесь покинуть текущий стык. Что сделать с вашей текущей работой перед переходом к выбранному фрагменту?
+      </p>
+
+      <!-- Обновленный блок кнопок с тремя вариантами -->
+      <div class="flex items-center justify-between w-full">
+        <button id="modal-btn-cancel" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-500 bg-transparent hover:bg-stone-100 transition active:scale-95">
+          Отмена
+        </button>
+        
+        <div class="flex items-center gap-3">
+          <button id="modal-btn-skip" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-600 bg-stone-100 hover:bg-stone-200 transition active:scale-95">
+            Пропустить и перейти
+          </button>
+          <button id="modal-btn-confirm" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition active:scale-95">
+            Завершить и перейти
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JS: ЛОГИКА ВЗАИМОДЕЙСТВИЯ -->
+  <script>
+    lucide.createIcons();
+
+    // 1. Ресайз и сворачивание колонок
+    const workspace = document.getElementById('workspace');
+    const colLeft = document.getElementById('col-left');
+    const colCenter = document.getElementById('col-center');
+    const colRight = document.getElementById('col-right');
+    const resizer1 = document.getElementById('resizer-1');
+    const resizer2 = document.getElementById('resizer-2');
+
+    let isDragging1 = false, isDragging2 = false;
+
+    resizer1.addEventListener('mousedown', (e) => {
+      isDragging1 = true;
+      resizer1.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    });
+
+    resizer2.addEventListener('mousedown', (e) => {
+      isDragging2 = true;
+      resizer2.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging1 && !isDragging2) return;
+      const rect = workspace.getBoundingClientRect();
+      const totalWidth = rect.width;
+
+      if (isDragging1) {
+        let leftPx = e.clientX - rect.left;
+        let leftPct = (leftPx / totalWidth) * 100;
+        if (leftPct < 15) leftPct = 15;
+        if (leftPct > 60) leftPct = 60;
+        colLeft.style.width = `${leftPct}%`;
+      }
+      if (isDragging2) {
+        let rightPx = rect.right - e.clientX;
+        let rightPct = (rightPx / totalWidth) * 100;
+        if (rightPct < 10) rightPct = 10;
+        if (rightPct > 40) rightPct = 40;
+        colRight.style.width = `${rightPct}%`;
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging1 || isDragging2) {
+        isDragging1 = false;
+        isDragging2 = false;
+        resizer1.classList.remove('dragging');
+        resizer2.classList.remove('dragging');
+        document.body.style.cursor = 'default';
+      }
+    });
+
+    let isLeftCollapsed = false, isRightCollapsed = false;
+    let lastLeftWidth = '35%', lastRightWidth = '20%';
+
+    document.getElementById('toggle-col-left').addEventListener('click', () => {
+      isLeftCollapsed = !isLeftCollapsed;
+      if (isLeftCollapsed) {
+        lastLeftWidth = colLeft.style.width || '35%';
+        colLeft.style.display = 'none';
+        resizer1.style.display = 'none';
+        showToastNotice("Левая колонка (оригинал) свернута");
+      } else {
+        colLeft.style.display = 'flex';
+        colLeft.style.width = lastLeftWidth;
+        resizer1.style.display = 'block';
+        showToastNotice("Левая колонка развернута");
+      }
+    });
+
+    document.getElementById('toggle-col-right').addEventListener('click', () => {
+      isRightCollapsed = !isRightCollapsed;
+      if (isRightCollapsed) {
+        lastRightWidth = colRight.style.width || '20%';
+        colRight.style.display = 'none';
+        resizer2.style.display = 'none';
+        showToastNotice("Глоссарий ветки свернут");
+      } else {
+        colRight.style.display = 'flex';
+        colRight.style.width = lastRightWidth;
+        resizer2.style.display = 'block';
+        showToastNotice("Глоссарий ветки развернут");
+      }
+    });
+
+    // 2. Модальное окно переключения фокуса
+    const focusModal = document.getElementById('focus-modal');
+    const focusModalCard = document.getElementById('focus-modal-card');
+    const modalBtnCancel = document.getElementById('modal-btn-cancel');
+    const modalBtnConfirm = document.getElementById('modal-btn-confirm');
+    let targetPendingFragment = null;
+
+    function promptSwitchFocus(fragmentId) {
+      targetPendingFragment = fragmentId;
+      focusModal.classList.remove('opacity-0', 'pointer-events-none');
+      focusModal.classList.add('opacity-100');
+      focusModalCard.classList.remove('scale-95');
+      focusModalCard.classList.add('scale-100');
+    }
+
+    function closeFocusModal() {
+      focusModal.classList.remove('opacity-100');
+      focusModal.classList.add('opacity-0', 'pointer-events-none');
+      focusModalCard.classList.remove('scale-100');
+      focusModalCard.classList.add('scale-95');
+    }
+
+    modalBtnCancel.addEventListener('click', closeFocusModal);
+    focusModal.addEventListener('click', (e) => {
+      if (e.target === focusModal) closeFocusModal();
+    });
+
+    modalBtnConfirm.addEventListener('click', () => {
+      closeFocusModal();
+      showToastNotice(`Переход к фрагменту #${targetPendingFragment === 'A' ? '104' : '105'} выполнен`);
+      
+      const seamWorkArea = document.getElementById('seam-work-area');
+      seamWorkArea.classList.add('ring-2', 'ring-indigo-400');
+      setTimeout(() => seamWorkArea.classList.remove('ring-2', 'ring-indigo-400'), 1000);
+    });
+
+    // 3. Смена авторов и альтернативные переводы
+    let authorStateA = 'alisa';
+    let authorStateB = 'mikhail';
+
+    const variantA = {
+      alisa: {
+        author: "@alisa_lingua",
+        para: "Экспедиционное судно бросило якорь в тот самый миг, когда сумерки окутали скалистую бухту. Команда собралась на верхней палубе, чтобы при свете фонаря сверить карты. Ветер почти полностью утих, и лишь мерная зыбь северного прилива глухо рокотала о деревянный борт.",
+        seam: "Он бережно свернул навигационную карту, сознавая, что малейшая оплошность у рифов будет стоить им многих дней пути."
+      },
+      ivan: {
+        author: "@ivan_pro",
+        para: "Судно экспедиции легло на якорь, когда вечерний сумрак уже сгустился над каменистой бухтой. На баке собрались офицеры, чтобы при мерцании сигнального фонаря изучить проложенный курс. Ветер совершенно стих, и лишь тяжелые северные волны глухо бились о форштевень.",
+        seam: "Он не спеша свернул промерную карту: цена ошибки в этих рифах измерялась потерянными неделями."
+      }
+    };
+
+    const variantB = {
+      mikhail: {
+        author: "@mikhail_t",
+        seam: "Капитан Сомов затем приблизился к планширю и велел спустить шлюпки на воду.",
+        para1: "Матросы работали в полной тишине, прислушиваясь к глухому рокоту прибоя о темные отвесные скалы впереди. Через несколько минут весла коснулись ледяной воды, и шлюпка растворилась в очертаниях старой навигационной башни.",
+        para2: "Никто не вспоминал о том, что произошло во время прошлой гидрографической съемки. Официальное донесение покоилось в архивах адмиралтейства, однако каждый сидящий на веслах знал мрачные предания этого забытого залива."
+      },
+      elena: {
+        author: "@elena_translate",
+        seam: "Затем капитан Сомов подошел к леерам и скомандовал спуск шлюпок.",
+        para1: "Гребцы работали молча, помня о яростном прибое у подножия гранитных утесов. Вскоре уключины заскрипели в студеной воде, и баркас устремился к темнеющей башне старого маяка.",
+        para2: "Ни единого слова не было сказано о гибели предшествующей партии. Отчет лежал под замком в адмиралтействе, но всякий матрос догадывался о зловещей тайне этих берегов."
+      }
+    };
+
+    window.requestAltTranslation = function(fragment) {
+      if (fragment === 'A') {
+        const nextKey = authorStateA === 'alisa' ? 'ivan' : 'alisa';
+        authorStateA = nextKey;
+        const data = variantA[nextKey];
+
+        const textParaA = document.getElementById('text-para-a');
+        const seamTextareaA = document.getElementById('seam-a');
+        const authorLabelA = document.getElementById('author-name-a');
+
+        textParaA.classList.add('text-swapping');
+        seamTextareaA.classList.add('text-swapping');
+
+        setTimeout(() => {
+          authorLabelA.textContent = data.author;
+          textParaA.textContent = data.para;
+          seamTextareaA.value = data.seam;
+
+          textParaA.classList.remove('text-swapping');
+          seamTextareaA.classList.remove('text-swapping');
+
+          checkChanges();
+          showToastNotice(`Загружен альтернативный перевод фрагмента #104 (${data.author})`);
+        }, 250);
+      } 
+      else if (fragment === 'B') {
+        const nextKey = authorStateB === 'mikhail' ? 'elena' : 'mikhail';
+        authorStateB = nextKey;
+        const data = variantB[nextKey];
+
+        const textParaB1 = document.getElementById('text-para-b1');
+        const textParaB2 = document.getElementById('text-para-b2');
+        const seamTextareaB = document.getElementById('seam-b');
+        const authorLabelB = document.getElementById('author-name-b');
+
+        textParaB1.classList.add('text-swapping');
+        textParaB2.classList.add('text-swapping');
+        seamTextareaB.classList.add('text-swapping');
+
+        setTimeout(() => {
+          authorLabelB.textContent = data.author;
+          seamTextareaB.value = data.seam;
+          textParaB1.textContent = data.para1;
+          textParaB2.textContent = data.para2;
+
+          textParaB1.classList.remove('text-swapping');
+          textParaB2.classList.remove('text-swapping');
+          seamTextareaB.classList.remove('text-swapping');
+
+          checkChanges();
+          showToastNotice(`Загружен альтернативный перевод фрагмента #105 (${data.author})`);
+        }, 250);
+      }
+    };
+
+    // 4. Плавный переход к Стыку #13
+    let currentStitchNumber = 12;
+    const totalStitches = 18;
+
+    const stitchData13 = {
+      en: {
+        paraBefore: "The landing boat cut through the icy black water toward the dilapidated stone jetty. Somov raised his brass lantern, illuminating slippery wooden steps encrusted with salt.",
+        seamA: "The damp air carried the pungent odor of sea kelp and rotting pine timbers from the abandoned wharf.",
+        seamB: "Lieutenant Morozov sprang onto the stones first, securing the hemp mooring line to an iron bollard.",
+        paraAfter: "Above them rose the formidable granite outline of the old lighthouse, its darkened glass lantern reflecting the cold stars.",
+        paraExtra: "Every footstep echoed hollowly against the wet stone walls of the canyon path leading upward."
+      },
+      ru: {
+        authorA: "@mikhail_t",
+        fragA: "• фрагмент #105",
+        paraA: "Шлюпка рассекала ледяную гладь, направляясь к полуразрушенному каменному молу. Сомов поднял фонарь, озарив скользкие деревянные ступени, покрытые коркой соли.",
+        seamA: "В сыром воздухе стоял резкий запах морских водорослей и полусгнивших сосновых бревен старого причала.",
+        seamB: "Лейтенант Морозов первым спрыгнул на скользкие камни, набросив пеньковый трос на чугунный кнехт.",
+        authorB: "@dmitry_v",
+        fragB: "• фрагмент #106",
+        paraB1: "Над их головами высился суровый гранитный силуэт старого маяка, чьи темные стекла отражали холодное сияние полярных звезд.",
+        paraB2: "Каждый шаг гулким эхом отдавался в мокрых каменных стенах тропы, уходящей вверх по ущелью к запертым дверям."
+      }
+    };
+
+    function transitionToNextStitch(actionType) {
+      const leftContainer = document.getElementById('left-scroll-container');
+      const centerContainer = document.getElementById('center-scroll-container');
+
+      leftContainer.classList.add('opacity-0');
+      centerContainer.classList.add('opacity-0');
+
+      setTimeout(() => {
+        currentStitchNumber = 13;
+
+        document.getElementById('seam-tag').textContent = "стык #13";
+        document.getElementById('progress-text').textContent = "13 из 18";
+        document.getElementById('progress-percent').textContent = "72%";
+        document.getElementById('progress-bar-fill').style.width = "72%";
+
+        document.getElementById('en-para-before').textContent = stitchData13.en.paraBefore;
+        document.getElementById('en-seam-a').textContent = stitchData13.en.seamA;
+        document.getElementById('en-seam-b').textContent = stitchData13.en.seamB;
+        document.getElementById('en-para-after').textContent = stitchData13.en.paraAfter;
+        document.getElementById('en-para-extra').textContent = stitchData13.en.paraExtra;
+
+        document.getElementById('author-name-a').textContent = stitchData13.ru.authorA;
+        document.getElementById('frag-label-a').textContent = stitchData13.ru.fragA;
+        document.getElementById('text-para-a').textContent = stitchData13.ru.paraA;
+        document.getElementById('seam-a').value = stitchData13.ru.seamA;
+
+        document.getElementById('seam-b').value = stitchData13.ru.seamB;
+        document.getElementById('author-name-b').textContent = stitchData13.ru.authorB;
+        document.getElementById('frag-label-b').textContent = stitchData13.ru.fragB;
+        document.getElementById('text-para-b1').textContent = stitchData13.ru.paraB1;
+        document.getElementById('text-para-b2').textContent = stitchData13.ru.paraB2;
+
+        originalStateTextA = stitchData13.ru.seamA;
+        originalStateTextB = stitchData13.ru.seamB;
+        checkChanges();
+
+        leftContainer.scrollTop = 0;
+        centerContainer.scrollTop = 0;
+
+        leftContainer.classList.remove('opacity-0');
+        centerContainer.classList.remove('opacity-0');
+
+        if (actionType === 'approve') {
+          showToastNotice("Стык #12 утвержден! Загружен Стык #13");
+        } else {
+          showToastNotice("Фрагмент пропущен. Загружен Стык #13");
+        }
+      }, 300);
+    }
+
+    // 5. Действия Action Bar и детекция изменений
+    let originalStateTextA = document.getElementById('seam-a').value;
+    let originalStateTextB = document.getElementById('seam-b').value;
+
+    const areaA = document.getElementById('seam-a');
+    const areaB = document.getElementById('seam-b');
+    const btnSave = document.getElementById('btn-save');
+    const btnApprove = document.getElementById('btn-approve');
+    const btnSkip = document.getElementById('btn-skip');
+    const saveStatusText = document.getElementById('save-status-text');
+    const toast = document.getElementById('toast');
+    const toastText = document.getElementById('toast-text');
+
+    function checkChanges() {
+      const isDirty = (areaA.value.trim() !== originalStateTextA.trim()) || (areaB.value.trim() !== originalStateTextB.trim());
+      if (isDirty) {
+        btnSave.disabled = false;
+        btnSave.className = "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-white bg-slate-800 hover:bg-slate-900 cursor-pointer transition active:scale-95";
+        saveStatusText.textContent = "есть несохраненные правки";
+        saveStatusText.className = "text-amber-600 font-medium lowercase";
+      } else {
+        btnSave.disabled = true;
+        btnSave.className = "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-stone-400 bg-stone-100 cursor-not-allowed transition active:scale-95";
+        saveStatusText.textContent = "все изменения сохранены";
+        saveStatusText.className = "text-stone-400 lowercase";
+      }
+    }
+
+    areaA.addEventListener('input', checkChanges);
+    areaB.addEventListener('input', checkChanges);
+
+    function showToastNotice(msg) {
+      toastText.textContent = msg;
+      toast.classList.remove('-translate-y-16', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('-translate-y-16', 'opacity-0');
+      }, 2600);
+    }
+
+    btnSave.addEventListener('click', () => {
+      if (btnSave.disabled) return;
+      btnSave.disabled = true;
+      originalStateTextA = areaA.value;
+      originalStateTextB = areaB.value;
+      btnSave.className = "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-stone-400 bg-stone-100 cursor-not-allowed transition active:scale-95";
+      saveStatusText.textContent = "все изменения сохранены";
+      saveStatusText.className = "text-emerald-600 font-medium lowercase";
+      showToastNotice("Правки текста успешно сохранены");
+    });
+
+    btnApprove.addEventListener('click', () => {
+      transitionToNextStitch('approve');
+    });
+
+    btnSkip.addEventListener('click', () => {
+      transitionToNextStitch('skip');
+    });
+
+    document.getElementById('btn-back-queue').addEventListener('click', () => {
+      showToastNotice("Возврат к списку задач...");
+    });
+
+    // Горячие клавиши
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        btnApprove.click();
+      }
+      if (e.altKey && (e.key === 's' || e.key === 'ы')) {
+        e.preventDefault();
+        btnSkip.click();
+      }
+      if (e.key === 'Escape' && !focusModal.classList.contains('opacity-0')) {
+        closeFocusModal();
+      }
+    });
+
+    // Регулировка кегля шрифта
+    const sizes = ['text-[17px]', 'text-[19px]', 'text-[21px]'];
+    let curSize = 1;
+    document.getElementById('font-inc').addEventListener('click', () => {
+      if (curSize < sizes.length - 1) {
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.remove(sizes[curSize]));
+        curSize++;
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.add(sizes[curSize]));
+      }
+    });
+    document.getElementById('font-dec').addEventListener('click', () => {
+      if (curSize > 0) {
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.remove(sizes[curSize]));
+        curSize--;
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.add(sizes[curSize]));
+      }
+    });
+  </script>
+</body>
+</html>

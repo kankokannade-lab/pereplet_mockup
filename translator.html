@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Переплёт — Рабочее пространство Переводчика</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter, Lora & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'Georgia', 'serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            paper: {
+              DEFAULT: '#FAF8F5',
+              50: '#FDFCFB',
+              100: '#F7F4EC',
+              200: '#EFE9DC',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Плавные минималистичные скроллбары */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
+
+    /* Бесшовный редактор: выглядит как абзац книги */
+    .seamless-textarea {
+      field-sizing: content;
+      resize: none;
+      min-height: 320px;
+      line-height: 1.85;
+    }
+
+    /* Интерактивные разделители колонок */
+    .resizer {
+      width: 6px;
+      cursor: col-resize;
+      transition: background-color 0.15s ease;
+      position: relative;
+      z-index: 20;
+    }
+    .resizer:hover, .resizer.dragging {
+      background-color: #6366F1 !important;
+    }
+    .resizer::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 2px;
+      height: 24px;
+      border-radius: 1px;
+      background-color: #CBD5E1;
+      transition: background-color 0.15s;
+    }
+    .resizer:hover::after, .resizer.dragging::after {
+      background-color: #FFFFFF;
+    }
+
+    /* Аккуратная вертикальная линия на полях */
+    .margin-marker {
+      position: relative;
+    }
+    .margin-marker::before {
+      content: '';
+      position: absolute;
+      left: -18px;
+      top: 4px;
+      bottom: 4px;
+      width: 3px;
+      border-radius: 2px;
+      background-color: #6366F1;
+    }
+
+    /* Плавные анимации обновления текста */
+    .fade-transition {
+      transition: opacity 0.25s ease-in-out, transform 0.25s ease-in-out;
+    }
+    .text-swapping {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  </style>
+</head>
+<body class="h-full bg-paper font-sans text-slate-800 flex flex-col overflow-hidden select-none">
+
+  <!-- 1. HEADER (ВЕРХНЯЯ ПАНЕЛЬ) -->
+  <header class="h-14 bg-white/90 backdrop-blur-xs border-b border-stone-200/90 px-6 flex items-center justify-between shrink-0 z-30">
+    <div class="flex items-center gap-5">
+      <button id="btn-back-queue" class="inline-flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-indigo-600 transition group py-1.5 px-2 rounded-md hover:bg-stone-50" title="Вернуться в каталог фрагментов">
+        <i data-lucide="arrow-left" class="w-4 h-4 text-stone-400 group-hover:text-indigo-600 transition-transform group-hover:-translate-x-0.5"></i>
+        <span>К выбору фрагмента</span>
+      </button>
+
+      <div class="h-4 w-px bg-stone-200"></div>
+
+      <div class="flex items-baseline gap-2">
+        <h1 class="text-sm font-semibold text-slate-900 tracking-tight">Экспедиция в Неизведанное</h1>
+        <span class="text-stone-300">•</span>
+        <span class="text-xs text-stone-500">Глава II. Залив полуночных ветров</span>
+      </div>
+    </div>
+
+    <!-- Центр: Информация о текущем микрофрагменте -->
+    <div class="flex items-center gap-2.5 bg-stone-100/70 border border-stone-200/70 px-3.5 py-1.5 rounded-full shadow-2xs">
+      <span class="w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+      <span class="text-xs font-medium text-slate-800">
+        Микрофрагмент <strong id="header-frag-number" class="font-semibold text-indigo-700">#104</strong>
+      </span>
+      <span class="text-stone-300">•</span>
+      <span id="header-frag-words" class="text-xs font-mono text-stone-600 font-medium">215 слов</span>
+      <span class="text-stone-300">•</span>
+      <span class="text-[11px] text-stone-500">норма: 150–300</span>
+    </div>
+
+    <!-- Масштаб текста и сворачивание колонок -->
+    <div class="flex items-center gap-2">
+      <div class="flex items-center bg-stone-100/80 rounded-md p-0.5 text-xs text-stone-600 mr-2">
+        <button id="font-dec" title="Уменьшить шрифт" class="px-2 py-0.5 hover:bg-white rounded transition text-xs font-serif font-bold">A-</button>
+        <button id="font-inc" title="Увеличить шрифт" class="px-2 py-0.5 hover:bg-white rounded transition text-sm font-serif font-bold">A+</button>
+      </div>
+
+      <button id="toggle-col-left" title="Свернуть/развернуть оригинал" class="p-1.5 rounded text-stone-400 hover:text-slate-800 hover:bg-stone-100 transition">
+        <i data-lucide="columns-2" class="w-4 h-4"></i>
+      </button>
+      <button id="toggle-col-right" title="Свернуть/развернуть глоссарий и ветку" class="p-1.5 rounded text-stone-400 hover:text-slate-800 hover:bg-stone-100 transition">
+        <i data-lucide="book-marked" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- 2. MAIN 3-COLUMN WORKSPACE -->
+  <main id="workspace" class="flex-1 flex overflow-hidden relative">
+
+    <!-- ЛЕВАЯ КОЛОНКА (35%): ОРИГИНАЛ + КЛИКАБЕЛЬНЫЙ КОНТЕКСТ ДЛЯ ПЕРЕХОДА -->
+    <section id="col-left" class="flex flex-col bg-paper-50 overflow-hidden shrink-0 border-r border-stone-200/80" style="width: 35%;">
+      <div class="h-9 px-6 border-b border-stone-200/70 bg-stone-100/40 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-stone-500 shrink-0">
+        <div class="flex items-center gap-2">
+          <i data-lucide="file-text" class="w-3.5 h-3.5 text-stone-400"></i>
+          <span>Оригинал (English)</span>
+        </div>
+        <span class="text-[10px] text-stone-400 lowercase">кликните для перехода к фрагменту</span>
+      </div>
+
+      <div id="left-scroll-container" class="flex-1 overflow-y-auto px-8 py-8 select-text fade-transition">
+        <div class="max-w-xl mx-auto space-y-6">
+
+          <!-- Верхний блок: context_before (Предыдущие 50-100 слов, кликабельный) -->
+          <div id="para-before-clickable" onclick="promptSwitchFocus(targetPrevId)" class="group/para cursor-pointer rounded-xl p-3 -m-3 hover:bg-stone-100/80 transition-all border border-transparent hover:border-stone-200/60" title="Нажмите, чтобы переключить рабочую область на этот фрагмент">
+            <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 uppercase tracking-wider mb-1.5">
+              <div class="flex items-center gap-1.5">
+                <i data-lucide="history" class="w-3.5 h-3.5 text-stone-400 group-hover/para:text-indigo-600 transition-colors"></i>
+                <span id="label-context-before" class="group-hover/para:text-indigo-600 transition-colors">Контекст до • фрагмент #103</span>
+              </div>
+              <span class="text-[10px] text-stone-400 group-hover/para:text-indigo-600 transition-colors lowercase">перейти</span>
+            </div>
+            <p id="context-before" class="reader-text font-serif text-slate-400 group-hover/para:text-slate-600 text-[18px] leading-[1.85] transition-colors">
+              The expedition vessel dropped anchor just as twilight enveloped the rocky bay. The crew gathered on the upper deck to inspect the nautical charts under lantern light. The wind had ceased almost entirely, leaving only the steady swell of the northern tides murmuring against the hull. He folded the navigation chart carefully, knowing that any mistake along the reef could cost them days.
+            </p>
+            <div class="opacity-0 group-hover/para:opacity-100 text-[11px] text-indigo-600 font-mono mt-2 flex items-center gap-1.5 transition-opacity">
+              <i data-lucide="focus" class="w-3 h-3 text-indigo-500"></i>
+              <span>Нажмите для перехода к переводу этого фрагмента</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 py-1">
+            <div class="h-px bg-stone-200 flex-1"></div>
+            <span class="text-[10px] font-mono uppercase text-indigo-500 tracking-wider font-semibold">текст для перевода</span>
+            <div class="h-px bg-stone-200 flex-1"></div>
+          </div>
+
+          <!-- Центральный блок: original_text (Сам фрагмент для перевода, крупный и контрастный) -->
+          <div id="para-current-clickable" onclick="promptSwitchFocus(targetNextId)" class="group/cur relative pl-5 margin-marker cursor-pointer rounded-r-xl p-2.5 -mr-2.5 hover:bg-stone-100/70 transition-all border border-transparent hover:border-stone-200/60" title="Нажмите для перехода к следующему фрагменту">
+            <div class="flex items-center justify-between text-[11px] font-mono -ml-5 mb-1.5">
+              <span class="text-indigo-700 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                <i data-lucide="crosshair" class="w-3.5 h-3.5 text-indigo-600"></i>
+                <span id="label-current-frag">Микрофрагмент #104</span>
+              </span>
+              <span id="label-current-words" class="text-stone-500 font-medium">215 слов</span>
+            </div>
+
+            <p id="original-text" class="reader-text font-serif text-slate-900 font-normal text-[19px] leading-[1.85]">
+              Captain Somov then stepped toward the railing and ordered the landing boats into the water. The sailors worked in complete silence, aware of the heavy surf pounding against the dark cliffs ahead. Within minutes the oars hit the freezing water, pulling away toward the silhouette of the old navigational tower. Nobody spoke of what had happened during the previous survey. The official report was locked away in the archives of the admiralty, yet every man in the boat knew the legends that surrounded this godforsaken fjord. The damp air carried the pungent odor of sea kelp and rotting pine timbers from the abandoned wharf. Lieutenant Morozov sprang onto the stones first, securing the hemp mooring line to an iron bollard. Above them rose the formidable granite outline of the old lighthouse, its darkened glass lantern reflecting the cold stars. Every footstep echoed hollowly against the wet stone walls of the canyon path leading upward to the iron gates. Somov raised his brass lamp, illuminating the worn inscription carved deep into the basalt lintel: 'Fortress of the North Wind, 1842'. The keyhole was rusted shut, yet the heavy bar had been lifted from inside.
+            </p>
+
+            <div class="opacity-0 group-hover/cur:opacity-100 text-[11px] text-stone-400 font-mono mt-2 -ml-5 flex items-center gap-1.5 transition-opacity">
+              <i data-lucide="arrow-right-circle" class="w-3 h-3 text-indigo-500"></i>
+              <span>Текущий активный фрагмент (клик для завершения и перехода дальше)</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 py-1">
+            <div class="h-px bg-stone-200 flex-1"></div>
+            <span class="text-[10px] font-mono uppercase text-stone-400 tracking-wider">продолжение книги</span>
+            <div class="h-px bg-stone-200 flex-1"></div>
+          </div>
+
+          <!-- Нижний блок: context_after (Последующие 50-100 слов, кликабельный) -->
+          <div id="para-after-clickable" onclick="promptSwitchFocus(targetNextId)" class="group/para cursor-pointer rounded-xl p-3 -m-3 hover:bg-stone-100/80 transition-all border border-transparent hover:border-stone-200/60 pb-6" title="Нажмите, чтобы переключить рабочую область на этот фрагмент">
+            <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 uppercase tracking-wider mb-1.5">
+              <div class="flex items-center gap-1.5">
+                <i data-lucide="corner-down-right" class="w-3.5 h-3.5 text-stone-400 group-hover/para:text-indigo-600 transition-colors"></i>
+                <span id="label-context-after" class="group-hover/para:text-indigo-600 transition-colors">Контекст после • фрагмент #105</span>
+              </div>
+              <span class="text-[10px] text-stone-400 group-hover/para:text-indigo-600 transition-colors lowercase">перейти</span>
+            </div>
+            <p id="context-after" class="reader-text font-serif text-slate-400 group-hover/para:text-slate-600 text-[18px] leading-[1.85] transition-colors">
+              The iron gate gave way with a mournful shriek of oxidized hinges. A gust of stale, subterranean air rushed out to meet them, extinguishing Morozov’s match before he could touch flame to the torch. They stood upon the threshold, peering into an endless spiral staircase descending into the bedrock of the island.
+            </p>
+            <div class="opacity-0 group-hover/para:opacity-100 text-[11px] text-indigo-600 font-mono mt-2 flex items-center gap-1.5 transition-opacity">
+              <i data-lucide="focus" class="w-3 h-3 text-indigo-500"></i>
+              <span>Нажмите для перехода к переводу этого фрагмента</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- РАЗДЕЛИТЕЛЬ 1 -->
+    <div id="resizer-1" class="resizer bg-stone-200/60 hover:bg-indigo-500"></div>
+
+    <!-- ЦЕНТРАЛЬНАЯ КОЛОНКА (45%): РАБОЧАЯ ЗОНА ПЕРЕВОДА -->
+    <section id="col-center" class="flex-1 flex flex-col bg-paper overflow-hidden">
+      <!-- Верхняя полоса состояния ветки -->
+      <div class="h-9 px-8 border-b border-stone-200/70 bg-stone-100/40 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-stone-500 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span class="text-slate-800 font-sans font-medium tracking-normal">ветка «Канон» • Классический стиль</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="save-status-text" class="text-stone-400 text-[10px] lowercase font-sans">все изменения сохранены</span>
+          <span id="save-dot" class="w-1.5 h-1.5 rounded-full bg-stone-300"></span>
+        </div>
+      </div>
+
+      <!-- Основная область скролла -->
+      <div id="center-scroll-container" class="flex-1 overflow-y-auto px-10 py-8 fade-transition">
+        <div class="max-w-2xl mx-auto space-y-6">
+
+          <!-- 1. Верхний блок: Перевод предыдущего фрагмента (read-only, для подстройки стиля) -->
+          <div class="relative rounded-xl border border-stone-200/70 bg-stone-50/60 p-4 transition-all">
+            <div class="flex items-center justify-between mb-2 text-xs font-mono text-stone-400">
+              <div class="flex items-center gap-2">
+                <i data-lucide="user" class="w-3.5 h-3.5 text-stone-400"></i>
+                <span id="prev-author-name" class="text-stone-600 font-semibold">@alisa_lingua</span>
+                <span id="prev-frag-label">• перевод фрагмента #103</span>
+              </div>
+              <span class="text-[10px] bg-stone-200/60 text-stone-600 px-2 py-0.5 rounded-full">образец стиля ветки</span>
+            </div>
+            <p id="prev-translation-text" class="reader-text font-serif text-slate-600 text-[18px] leading-[1.85] select-text">
+              Экспедиционное судно бросило якорь в тот самый миг, когда сумерки окутали скалистую бухту. Команда собралась на верхней палубе, чтобы при свете фонаря сверить карты. Ветер почти полностью утих, и лишь мерная зыбь северного прилива глухо рокотала о деревянный борт. Он бережно свернул навигационную карту, сознавая, что малейшая оплошность у рифов будет стоить им многих дней пути.
+            </p>
+          </div>
+
+          <!-- 2. Центральный блок: Просторный textarea для текущего микрофрагмента -->
+          <div class="space-y-3 pt-1">
+            <div class="flex items-center justify-between">
+              <label for="translation-input" class="text-xs font-semibold text-slate-800 tracking-tight flex items-center gap-2">
+                <i data-lucide="edit-3" class="w-3.5 h-3.5 text-indigo-600"></i>
+                <span id="current-editor-label">Ваш перевод фрагмента #104</span>
+              </label>
+
+              <!-- Динамический счетчик слов -->
+              <div class="flex items-center gap-2 text-xs font-mono">
+                <span class="text-stone-400">Слов:</span>
+                <span id="word-badge" class="px-2 py-0.5 rounded-md font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/70">
+                  <span id="word-count">184</span> / 150–300
+                </span>
+                <span id="word-status" class="text-[11px] text-emerald-600 font-sans font-medium flex items-center gap-1">
+                  <i data-lucide="check-circle-2" class="w-3 h-3 text-emerald-500"></i>
+                  в норме
+                </span>
+              </div>
+            </div>
+
+            <!-- Бесшовное текстовое поле ввода -->
+            <div class="relative bg-white rounded-xl border border-stone-200/90 shadow-2xs hover:border-stone-300 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all p-5">
+              <textarea id="translation-input" class="seamless-textarea w-full font-serif text-[19px] text-slate-900 bg-transparent outline-none transition-all placeholder-stone-400 leading-[1.85]" placeholder="Введите ваш перевод микрофрагмента... Следуйте терминам глоссария и интонации предыдущего переводчика.">Капитан Сомов приблизился к планширю и велел спустить шлюпки на воду. Матросы работали в полной тишине, прислушиваясь к глухому рокоту прибоя о темные отвесные скалы впереди. Через несколько минут весла коснулись ледяной воды, направляя шлюпку к очертаниям старой навигационной башни. Никто не вспоминал о том, что произошло во время прошлой гидрографической съемки. Официальное донесение покоилось в архивах адмиралтейства, однако каждый сидящий на веслах знал мрачные предания этого забытого залива. В сыром воздухе стоял резкий запах морских водорослей и полусгнивших сосновых бревен заброшенного причала. Лейтенант Морозов первым спрыгнул на скользкие камни, набросив пеньковый трос на чугунный кнехт. Над их головами высился суровый гранитный силуэт старого маяка, чьи темные стекла отражали холодное сияние полярных звезд. Каждый шаг гулким эхом отдавался в мокрых каменных стенах тропы, уходящей вверх к тяжелым кованым воротам. Сомов поднял латунный фонарь, озарив высеченную в базальтовой притолоке полустертую надпись: «Твердыня Северного Ветра, 1842». Замочная скважина заросла ржавчиной, однако тяжелый внутренний засов был кем-то поднят.</textarea>
+
+              <div class="pt-3 border-t border-stone-100 mt-2 flex items-center justify-between text-[11px] text-stone-400 font-mono">
+                <span class="flex items-center gap-1.5">
+                  <i data-lucide="shield-check" class="w-3.5 h-3.5 text-stone-400"></i>
+                  Человеческий перевод • без машинных подсказок
+                </span>
+                <span id="char-count">1156 симв.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Нижний блок: Перевод следующего фрагмента (read-only, если уже переведен) -->
+          <div class="relative rounded-xl border border-stone-200/70 bg-stone-50/60 p-4 transition-all">
+            <div class="flex items-center justify-between mb-2 text-xs font-mono text-stone-400">
+              <div class="flex items-center gap-2">
+                <i data-lucide="user" class="w-3.5 h-3.5 text-stone-400"></i>
+                <span id="next-author-name" class="text-stone-600 font-semibold">@mikhail_t</span>
+                <span id="next-frag-label">• перевод следующего фрагмента #105</span>
+              </div>
+              <span class="text-[10px] bg-stone-200/60 text-stone-600 px-2 py-0.5 rounded-full">выравнивание стыка</span>
+            </div>
+            <p id="next-translation-text" class="reader-text font-serif text-slate-600 text-[18px] leading-[1.85] select-text">
+              Кованые ворота поддались с протяжным скрежетом заржавленных петель. Навстречу им вырвался порыв затхлого подземного воздуха, мгновенно задув спичку Морозова, прежде чем тот успел поднести пламя к факелу. Они замерли на пороге, вглядываясь в бесконечную винтовую лестницу, уходящую вглубь скального массива острова.
+            </p>
+          </div>
+
+          <div class="h-12"></div>
+        </div>
+      </div>
+
+      <!-- Toast Feedback -->
+      <div id="toast" class="absolute top-4 right-8 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-lg text-xs font-medium flex items-center gap-2.5 transform -translate-y-16 opacity-0 transition-all duration-300 pointer-events-none z-50">
+        <i id="toast-icon" data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-text">Изменения сохранены</span>
+      </div>
+    </section>
+
+    <!-- РАЗДЕЛИТЕЛЬ 2 -->
+    <div id="resizer-2" class="resizer bg-stone-200/60 hover:bg-indigo-500"></div>
+
+    <!-- ПРАВАЯ КОЛОНКА (20%): САЙДБАР (ГЛОССАРИЙ И ВЕТКА) -->
+    <aside id="col-right" class="flex flex-col bg-paper-50 overflow-hidden shrink-0 border-l border-stone-200/80" style="width: 20%;">
+      <!-- Заголовок сайдбара -->
+      <div class="h-9 px-4 border-b border-stone-200/70 bg-stone-100/40 flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-stone-500 shrink-0">
+        <div class="flex items-center gap-1.5 font-semibold text-slate-700">
+          <i data-lucide="book-open" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Глоссарий ветки</span>
+        </div>
+        <span id="glossary-count-badge" class="text-[10px] bg-stone-200/70 text-stone-600 px-1.5 py-0.2 rounded font-mono">6 терминов</span>
+      </div>
+
+      <!-- Инфо-блок ветки -->
+      <div class="p-3.5 bg-indigo-50/50 border-b border-stone-200/80">
+        <div class="flex items-center gap-2 text-indigo-900 font-semibold text-xs mb-1">
+          <i data-lucide="git-branch" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <span>Текущая ветка: Канон</span>
+        </div>
+        <div class="text-[11px] text-stone-600 leading-snug">
+          Классический стиль. Используя этот глоссарий, вы соглашаетесь с доминирующим стилем ветки.
+        </div>
+      </div>
+
+      <!-- Поиск по глоссарию -->
+      <div class="p-3 border-b border-stone-200/60">
+        <div class="relative">
+          <input type="text" id="glossary-search" placeholder="Поиск по терминам..." class="w-full bg-white border border-stone-200 text-xs rounded-md pl-7 pr-3 py-1.5 focus:outline-none focus:border-indigo-400 text-slate-800 placeholder-stone-400">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-stone-400 absolute left-2 top-2"></i>
+        </div>
+      </div>
+
+      <!-- Список терминов глоссария -->
+      <div id="glossary-list" class="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs">
+        
+        <div class="glossary-item group cursor-pointer hover:bg-white p-2.5 rounded-lg transition-colors border border-transparent hover:border-stone-200" onclick="copyTerm('Captain Somov', 'капитан Сомов')">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Имя собственное</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">согласован 9/10</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Captain Somov</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">капитан Сомов</div>
+        </div>
+
+        <div class="glossary-item group cursor-pointer hover:bg-white p-2.5 rounded-lg transition-colors border border-transparent hover:border-stone-200" onclick="copyTerm('Navigation chart', 'навигационная карта')">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Морской термин</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Navigation chart</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">навигационная карта</div>
+        </div>
+
+        <div class="glossary-item group cursor-pointer hover:bg-white p-2.5 rounded-lg transition-colors border border-transparent hover:border-stone-200" onclick="copyTerm('Railing', 'планширь')">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Судостроение</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Railing</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">планширь / леера</div>
+        </div>
+
+        <div class="glossary-item group cursor-pointer hover:bg-white p-2.5 rounded-lg transition-colors border border-transparent hover:border-stone-200" onclick="copyTerm('Navigational tower', 'навигационная башня')">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Топоним</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Navigational tower</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">навигационная башня</div>
+        </div>
+
+        <div class="glossary-item group cursor-pointer hover:bg-white p-2.5 rounded-lg transition-colors border border-transparent hover:border-stone-200" onclick="copyTerm('Mooring line', 'пеньковый трос / швартов')">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Такелаж</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Mooring line</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">пеньковый трос / швартов</div>
+        </div>
+
+        <div class="glossary-item group cursor-pointer hover:bg-white p-2.5 rounded-lg transition-colors border border-transparent hover:border-stone-200" onclick="copyTerm('Iron bollard', 'чугунный кнехт')">
+          <div class="flex items-center justify-between text-[11px] font-mono text-stone-400 mb-0.5">
+            <span class="uppercase">Портовое дело</span>
+            <span class="text-emerald-700 bg-emerald-50 px-1 rounded text-[10px]">консенсус</span>
+          </div>
+          <div class="font-serif text-[14px] text-slate-900 font-medium">Iron bollard</div>
+          <div class="text-stone-400 text-[11px] my-0.5">↓</div>
+          <div class="font-serif text-[14px] text-indigo-700 font-medium">чугунный кнехт</div>
+        </div>
+
+      </div>
+
+      <!-- Подвал глоссария -->
+      <div class="p-3 border-t border-stone-200/80 bg-stone-100/30 text-[11px] text-stone-500">
+        Термины сформированы консенсусом переводчиков ветки (≥88%).
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- 3. ACTION BAR (НИЖНЯЯ ПАНЕЛЬ ДЕЙСТВИЙ) -->
+  <footer class="h-16 bg-white border-t border-stone-200/90 px-8 flex items-center justify-between shrink-0 z-40">
+    <!-- Левая часть: Кнопка создания форка -->
+    <div class="flex items-center gap-4">
+      <button id="btn-fork" type="button" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 hover:text-slate-900 border border-stone-200/80 transition active:scale-95" title="Создать собственную ветку с альтернативным стилем">
+        <i data-lucide="git-fork" class="w-4 h-4 text-indigo-600"></i>
+        <span>Создать форк (не согласен со стилем)</span>
+      </button>
+
+      <div class="hidden md:flex items-center gap-3 text-xs text-stone-400 font-mono pl-2">
+        <span><kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-300 rounded text-stone-600 font-medium">Ctrl + S</kbd> сохранить</span>
+        <span><kbd class="px-1.5 py-0.5 bg-stone-100 border border-stone-300 rounded text-stone-600 font-medium">Ctrl + Enter</kbd> отправить</span>
+      </div>
+    </div>
+
+    <!-- Правая часть: Сохранить черновик и Отправить перевод -->
+    <div class="flex items-center gap-3">
+      <button id="btn-save-draft" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 transition active:scale-95" title="Сохранить черновик перевода (Ctrl+S)">
+        <i data-lucide="save" class="w-4 h-4 text-stone-500"></i>
+        <span>Сохранить черновик</span>
+      </button>
+
+      <button id="btn-publish" type="button" class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition active:scale-95" title="Отправить перевод в ветку перевода (Ctrl+Enter)">
+        <i data-lucide="send" class="w-4 h-4"></i>
+        <span>Отправить перевод</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- 4. МОДАЛЬНОЕ ОКНО: СОЗДАНИЕ ФОРКА ВЕТКИ -->
+  <div id="fork-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="fork-modal-card" class="bg-white rounded-2xl p-6 max-w-[500px] w-full mx-4 shadow-2xl border border-stone-200 transform scale-95 transition-transform duration-200">
+      
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+          <i data-lucide="git-fork" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Создать собственную ветку (Форк)?</h3>
+          <p class="text-xs text-stone-500">Альтернативное стилистическое решение</p>
+        </div>
+      </div>
+
+      <p class="text-sm text-stone-600 leading-relaxed mb-4">
+        Создание форка позволит вам задать собственные правила перевода и глоссарий. Вы уверены?
+      </p>
+
+      <div class="p-3 bg-stone-50 rounded-lg border border-stone-200/80 mb-6 text-xs text-stone-500 leading-normal">
+        <strong class="text-stone-700 font-semibold block mb-0.5">Как это работает:</strong>
+        Новая ветка начнется как <span class="text-indigo-600 font-medium">Черновик сообщества (Community Draft)</span>. Если ваш перевод и терминология наберут достаточную поддержку читателей и переводчиков, ветка сможет претендовать на статус основного Канона.
+      </div>
+
+      <div class="flex items-center justify-end gap-3 w-full">
+        <button id="modal-fork-cancel" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-500 bg-transparent hover:bg-stone-100 transition active:scale-95">
+          Отмена
+        </button>
+        <button id="modal-fork-confirm" type="button" class="px-5 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition active:scale-95 inline-flex items-center gap-2">
+          <i data-lucide="git-branch-plus" class="w-4 h-4"></i>
+          <span>Создать форк</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 5. МОДАЛЬНОЕ ОКНО: ПРЕДУПРЕЖДЕНИЕ ПРИ ПЕРЕХОДЕ К ДРУГОМУ ФРАГМЕНТУ -->
+  <div id="switch-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="switch-modal-card" class="bg-white rounded-2xl p-6 max-w-[500px] w-full mx-4 shadow-2xl border border-stone-200 transform scale-95 transition-transform duration-200">
+      
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+          <i data-lucide="alert-circle" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 id="switch-modal-title" class="text-base font-bold text-slate-900">Вы закончили перевод фрагмента?</h3>
+          <p id="switch-modal-subtitle" class="text-xs text-stone-500">Переход к микрофрагменту #105</p>
+        </div>
+      </div>
+
+      <p id="switch-modal-desc" class="text-sm text-stone-600 leading-relaxed mb-6">
+        Вы собираетесь переключить рабочую область на другой фрагмент книги. Выберите, подтвердить ли готовность текущего перевода или пропустить его без сохранения.
+      </p>
+
+      <div class="flex items-center justify-between w-full pt-1">
+        <button id="modal-switch-cancel" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-500 bg-transparent hover:bg-stone-100 transition active:scale-95">
+          Отмена
+        </button>
+        
+        <div class="flex items-center gap-2.5">
+          <button id="modal-switch-skip" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 transition active:scale-95">
+            Нет, пропустить
+          </button>
+          <button id="modal-switch-confirm" type="button" class="px-5 py-2 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs transition active:scale-95">
+            Да, закончил
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JS: ЛОГИКА ВЗАИМОДЕЙСТВИЯ -->
+  <script>
+    lucide.createIcons();
+
+    // 1. Ресайз и сворачивание колонок
+    const workspace = document.getElementById('workspace');
+    const colLeft = document.getElementById('col-left');
+    const colCenter = document.getElementById('col-center');
+    const colRight = document.getElementById('col-right');
+    const resizer1 = document.getElementById('resizer-1');
+    const resizer2 = document.getElementById('resizer-2');
+
+    let isDragging1 = false, isDragging2 = false;
+
+    resizer1.addEventListener('mousedown', (e) => {
+      isDragging1 = true;
+      resizer1.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    });
+
+    resizer2.addEventListener('mousedown', (e) => {
+      isDragging2 = true;
+      resizer2.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging1 && !isDragging2) return;
+      const rect = workspace.getBoundingClientRect();
+      const totalWidth = rect.width;
+
+      if (isDragging1) {
+        let leftPx = e.clientX - rect.left;
+        let leftPct = (leftPx / totalWidth) * 100;
+        if (leftPct < 15) leftPct = 15;
+        if (leftPct > 60) leftPct = 60;
+        colLeft.style.width = `${leftPct}%`;
+      }
+      if (isDragging2) {
+        let rightPx = rect.right - e.clientX;
+        let rightPct = (rightPx / totalWidth) * 100;
+        if (rightPct < 10) rightPct = 10;
+        if (rightPct > 40) rightPct = 40;
+        colRight.style.width = `${rightPct}%`;
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging1 || isDragging2) {
+        isDragging1 = false;
+        isDragging2 = false;
+        resizer1.classList.remove('dragging');
+        resizer2.classList.remove('dragging');
+        document.body.style.cursor = 'default';
+      }
+    });
+
+    let isLeftCollapsed = false, isRightCollapsed = false;
+    let lastLeftWidth = '35%', lastRightWidth = '20%';
+
+    document.getElementById('toggle-col-left').addEventListener('click', () => {
+      isLeftCollapsed = !isLeftCollapsed;
+      if (isLeftCollapsed) {
+        lastLeftWidth = colLeft.style.width || '35%';
+        colLeft.style.display = 'none';
+        resizer1.style.display = 'none';
+        showToastNotice("Левая колонка (оригинал) свернута");
+      } else {
+        colLeft.style.display = 'flex';
+        colLeft.style.width = lastLeftWidth;
+        resizer1.style.display = 'block';
+        showToastNotice("Левая колонка развернута");
+      }
+    });
+
+    document.getElementById('toggle-col-right').addEventListener('click', () => {
+      isRightCollapsed = !isRightCollapsed;
+      if (isRightCollapsed) {
+        lastRightWidth = colRight.style.width || '20%';
+        colRight.style.display = 'none';
+        resizer2.style.display = 'none';
+        showToastNotice("Сайдбар глоссария свернут");
+      } else {
+        colRight.style.display = 'flex';
+        colRight.style.width = lastRightWidth;
+        resizer2.style.display = 'block';
+        showToastNotice("Сайдбар глоссария развернут");
+      }
+    });
+
+    // 2. Подсчет слов и символов в textarea
+    const translationTextarea = document.getElementById('translation-input');
+    const wordCountEl = document.getElementById('word-count');
+    const charCountEl = document.getElementById('char-count');
+    const wordStatusEl = document.getElementById('word-status');
+    const wordBadgeEl = document.getElementById('word-badge');
+    const saveStatusText = document.getElementById('save-status-text');
+    const saveDot = document.getElementById('save-dot');
+
+    let savedContent = translationTextarea.value;
+
+    function countWords(str) {
+      const trimmed = str.trim();
+      if (!trimmed) return 0;
+      const words = trimmed.match(/[\p{L}\p{N}_\-]+/gu);
+      return words ? words.length : 0;
+    }
+
+    function updateWordStats() {
+      const text = translationTextarea.value;
+      const count = countWords(text);
+      const chars = text.length;
+
+      wordCountEl.textContent = count;
+      charCountEl.textContent = `${chars} симв.`;
+
+      // Статус нормы: 150-300 слов
+      if (count === 0) {
+        wordStatusEl.innerHTML = `<span class="text-stone-400">пусто</span>`;
+        wordBadgeEl.className = "px-2 py-0.5 rounded-md font-semibold text-stone-600 bg-stone-100 border border-stone-200";
+      } else if (count < 150) {
+        wordStatusEl.innerHTML = `<i data-lucide="alert-circle" class="w-3 h-3 text-amber-500"></i><span class="text-amber-600">короткий (${count}/150)</span>`;
+        wordBadgeEl.className = "px-2 py-0.5 rounded-md font-semibold text-amber-700 bg-amber-50 border border-amber-200";
+      } else if (count <= 300) {
+        wordStatusEl.innerHTML = `<i data-lucide="check-circle-2" class="w-3 h-3 text-emerald-500"></i><span class="text-emerald-600">в норме</span>`;
+        wordBadgeEl.className = "px-2 py-0.5 rounded-md font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200";
+      } else {
+        wordStatusEl.innerHTML = `<i data-lucide="alert-triangle" class="w-3 h-3 text-rose-500"></i><span class="text-rose-600">превышение (>300)</span>`;
+        wordBadgeEl.className = "px-2 py-0.5 rounded-md font-semibold text-rose-700 bg-rose-50 border border-rose-200";
+      }
+      lucide.createIcons();
+
+      // Проверка несохраненных правок
+      if (text.trim() !== savedContent.trim()) {
+        saveStatusText.textContent = "есть несохраненные правки";
+        saveStatusText.className = "text-amber-600 font-medium lowercase font-sans";
+        saveDot.className = "w-1.5 h-1.5 rounded-full bg-amber-500";
+      } else {
+        saveStatusText.textContent = "все изменения сохранены";
+        saveStatusText.className = "text-stone-400 lowercase font-sans";
+        saveDot.className = "w-1.5 h-1.5 rounded-full bg-stone-300";
+      }
+    }
+
+    translationTextarea.addEventListener('input', updateWordStats);
+    updateWordStats(); // Инициализация
+
+    // 3. Toast-уведомления
+    const toast = document.getElementById('toast');
+    const toastText = document.getElementById('toast-text');
+    let toastTimeout = null;
+
+    function showToastNotice(msg, iconName = 'check', isSuccess = true) {
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastText.textContent = msg;
+      
+      const iconEl = document.getElementById('toast-icon');
+      iconEl.setAttribute('data-lucide', iconName);
+      if (isSuccess) {
+        iconEl.className = "w-4 h-4 text-emerald-400";
+      } else {
+        iconEl.className = "w-4 h-4 text-indigo-400";
+      }
+      lucide.createIcons();
+
+      toast.classList.remove('-translate-y-16', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('-translate-y-16', 'opacity-0');
+      }, 2600);
+    }
+
+    // 4. Действия кнопок Action Bar
+    const btnSaveDraft = document.getElementById('btn-save-draft');
+    const btnPublish = document.getElementById('btn-publish');
+
+    function saveDraft() {
+      savedContent = translationTextarea.value;
+      saveStatusText.textContent = "черновик сохранен";
+      saveStatusText.className = "text-emerald-600 font-medium lowercase font-sans";
+      saveDot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500";
+      showToastNotice("Черновик перевода успешно сохранен", 'save');
+    }
+
+    function publishTranslation() {
+      const words = countWords(translationTextarea.value);
+      if (words === 0) {
+        showToastNotice("Нельзя отправить пустой перевод", 'alert-circle', false);
+        return;
+      }
+      savedContent = translationTextarea.value;
+      saveStatusText.textContent = "перевод опубликован";
+      saveStatusText.className = "text-indigo-600 font-medium lowercase font-sans";
+      saveDot.className = "w-1.5 h-1.5 rounded-full bg-indigo-500";
+      showToastNotice(`Перевод микрофрагмента #${currentFragmentId} отправлен на проверку стыков!`, 'send');
+    }
+
+    btnSaveDraft.addEventListener('click', saveDraft);
+    btnPublish.addEventListener('click', publishTranslation);
+
+    // 5. Модальное окно создания форка
+    const forkModal = document.getElementById('fork-modal');
+    const forkModalCard = document.getElementById('fork-modal-card');
+    const btnFork = document.getElementById('btn-fork');
+    const modalForkCancel = document.getElementById('modal-fork-cancel');
+    const modalForkConfirm = document.getElementById('modal-fork-confirm');
+
+    function openForkModal() {
+      forkModal.classList.remove('opacity-0', 'pointer-events-none');
+      forkModal.classList.add('opacity-100');
+      forkModalCard.classList.remove('scale-95');
+      forkModalCard.classList.add('scale-100');
+    }
+
+    function closeForkModal() {
+      forkModal.classList.remove('opacity-100');
+      forkModal.classList.add('opacity-0', 'pointer-events-none');
+      forkModalCard.classList.remove('scale-100');
+      forkModalCard.classList.add('scale-95');
+    }
+
+    btnFork.addEventListener('click', openForkModal);
+    modalForkCancel.addEventListener('click', closeForkModal);
+    forkModal.addEventListener('click', (e) => {
+      if (e.target === forkModal) closeForkModal();
+    });
+
+    modalForkConfirm.addEventListener('click', () => {
+      closeForkModal();
+      showToastNotice("Форк создан! Вы переключены на новую ветку перевода", 'git-branch');
+    });
+
+    // 6. База микрофрагментов и переход при клике на оригинал слева
+    const fragmentsDB = {
+      103: {
+        id: 103,
+        words: 195,
+        prevId: 102,
+        nextId: 104,
+        contextBefore: "The northern archipelago was mapped only in crude sketches by the fur traders of the eighteenth century. No imperial vessel had sailed these coordinates for over forty years, leaving the fjord shrouded in silence and drifting ice.",
+        originalText: "The expedition vessel dropped anchor just as twilight enveloped the rocky bay. The crew gathered on the upper deck to inspect the nautical charts under lantern light. The wind had ceased almost entirely, leaving only the steady swell of the northern tides murmuring against the hull. He folded the navigation chart carefully, knowing that any mistake along the reef could cost them days.",
+        contextAfter: "Captain Somov then stepped toward the railing and ordered the landing boats into the water. The sailors worked in complete silence, aware of the heavy surf pounding against the dark cliffs ahead.",
+        prevAuthor: "@ivan_pro",
+        prevFrag: "102",
+        prevTranslation: "Северный архипелаг был нанесен на карты лишь приблизительными набросками пушных промысловиков восемнадцатого столетия. Ни одно казенное судно не заходило в эти координаты свыше сорока лет, оставляя фиорд во власти безмолвия и плавучих льдов.",
+        translation: "Экспедиционное судно бросило якорь в тот самый миг, когда сумерки окутали скалистую бухту. Команда собралась на верхней палубе, чтобы при свете фонаря сверить карты. Ветер почти полностью утих, и лишь мерная зыбь северного прилива глухо рокотала о деревянный борт. Он бережно свернул навигационную карту, сознавая, что малейшая оплошность у рифов будет стоить им многих дней пути.",
+        nextAuthor: "@mikhail_t",
+        nextFrag: "104",
+        nextTranslation: "Капитан Сомов приблизился к планширю и велел спустить шлюпки на воду. Матросы работали в полной тишине, прислушиваясь к глухому рокоту прибоя о темные отвесные скалы впереди..."
+      },
+      104: {
+        id: 104,
+        words: 215,
+        prevId: 103,
+        nextId: 105,
+        contextBefore: "The expedition vessel dropped anchor just as twilight enveloped the rocky bay. The crew gathered on the upper deck to inspect the nautical charts under lantern light. The wind had ceased almost entirely, leaving only the steady swell of the northern tides murmuring against the hull. He folded the navigation chart carefully, knowing that any mistake along the reef could cost them days.",
+        originalText: "Captain Somov then stepped toward the railing and ordered the landing boats into the water. The sailors worked in complete silence, aware of the heavy surf pounding against the dark cliffs ahead. Within minutes the oars hit the freezing water, pulling away toward the silhouette of the old navigational tower. Nobody spoke of what had happened during the previous survey. The official report was locked away in the archives of the admiralty, yet every man in the boat knew the legends that surrounded this godforsaken fjord. The damp air carried the pungent odor of sea kelp and rotting pine timbers from the abandoned wharf. Lieutenant Morozov sprang onto the stones first, securing the hemp mooring line to an iron bollard. Above them rose the formidable granite outline of the old lighthouse, its darkened glass lantern reflecting the cold stars. Every footstep echoed hollowly against the wet stone walls of the canyon path leading upward to the iron gates. Somov raised his brass lamp, illuminating the worn inscription carved deep into the basalt lintel: 'Fortress of the North Wind, 1842'. The keyhole was rusted shut, yet the heavy bar had been lifted from inside.",
+        contextAfter: "The iron gate gave way with a mournful shriek of oxidized hinges. A gust of stale, subterranean air rushed out to meet them, extinguishing Morozov’s match before he could touch flame to the torch. They stood upon the threshold, peering into an endless spiral staircase descending into the bedrock of the island.",
+        prevAuthor: "@alisa_lingua",
+        prevFrag: "103",
+        prevTranslation: "Экспедиционное судно бросило якорь в тот самый миг, когда сумерки окутали скалистую бухту. Команда собралась на верхней палубе, чтобы при свете фонаря сверить карты. Ветер почти полностью утих, и лишь мерная зыбь северного прилива глухо рокотала о деревянный борт. Он бережно свернул навигационную карту, сознавая, что малейшая оплошность у рифов будет стоить им многих дней пути.",
+        translation: "Капитан Сомов приблизился к планширю и велел спустить шлюпки на воду. Матросы работали в полной тишине, прислушиваясь к глухому рокоту прибоя о темные отвесные скалы впереди. Через несколько минут весла коснулись ледяной воды, направляя шлюпку к очертаниям старой навигационной башни. Никто не вспоминал о том, что произошло во время прошлой гидрографической съемки. Официальное донесение покоилось в архивах адмиралтейства, однако каждый сидящий на веслах знал мрачные предания этого забытого залива. В сыром воздухе стоял резкий запах морских водорослей и полусгнивших сосновых бревен заброшенного причала. Лейтенант Морозов первым спрыгнул на скользкие камни, набросив пеньковый трос на чугунный кнехт. Над их головами высился суровый гранитный силуэт старого маяка, чьи темные стекла отражали холодное сияние полярных звезд. Каждый шаг гулким эхом отдавался в мокрых каменных стенах тропы, уходящей вверх к тяжелым кованым воротам. Сомов поднял латунный фонарь, озарив высеченную в базальтовой притолоке полустертую надпись: «Твердыня Северного Ветра, 1842». Замочная скважина заросла ржавчиной, однако тяжелый внутренний засов был кем-то поднят.",
+        nextAuthor: "@mikhail_t",
+        nextFrag: "105",
+        nextTranslation: "Кованые ворота поддались с протяжным скрежетом заржавленных петель. Навстречу им вырвался порыв затхлого подземного воздуха, мгновенно задув спичку Морозова, прежде чем тот успел поднести пламя к факелу. Они замерли на пороге, вглядываясь в бесконечную винтовую лестницу, уходящую вглубь скального массива острова."
+      },
+      105: {
+        id: 105,
+        words: 198,
+        prevId: 104,
+        nextId: 106,
+        contextBefore: "Somov raised his brass lamp, illuminating the worn inscription carved deep into the basalt lintel: 'Fortress of the North Wind, 1842'. The keyhole was rusted shut, yet the heavy bar had been lifted from inside.",
+        originalText: "The iron gate gave way with a mournful shriek of oxidized hinges. A gust of stale, subterranean air rushed out to meet them, extinguishing Morozov’s match before he could touch flame to the torch. They stood upon the threshold, peering into an endless spiral staircase descending into the bedrock of the island. Moisture seeped through cracks in the vaulted granite ceiling, dripping with a rhythmic cadence upon the stone flags below. Morozov struck a second lucifer match, cupping his palms against the draft. In the flickering flare of phosphorus, the shadows darted across row upon row of rusted armaments stacked along the damp masonry. Somov unholstered his service revolver with deliberate calm, motioning the two seamen to follow him into the descending gloom.",
+        contextAfter: "The descent seemed without termination, turning seventy feet beneath the waterline where the muffled roar of the ocean vibrated through the cold basalt walls of the fortress.",
+        prevAuthor: "@translator_you",
+        prevFrag: "104",
+        prevTranslation: "Капитан Сомов приблизился к планширю и велел спустить шлюпки на воду... Сомов поднял латунный фонарь, озарив высеченную в базальтовой притолоке полустертую надпись: «Твердыня Северного Ветра, 1842». Замочная скважина заросла ржавчиной, однако тяжелый внутренний засов был кем-то поднят.",
+        translation: "Кованые ворота поддались с протяжным скрежетом заржавленных петель. Навстречу им вырвался порыв затхлого подземного воздуха, мгновенно задув спичку Морозова, прежде чем тот успел поднести пламя к факелу. Они замерли на пороге, вглядываясь в бесконечную винтовую лестницу, уходящую вглубь скального массива острова. Влажность сочилась сквозь трещины сводчатого гранитного потолка, мерно капая на каменные плиты внизу. Морозов чиркнул второй серной спичкой, прикрыв пламя ладонями от сквозняка. При мерцающем фосфорном свете тени метнулись по штабелям заржавленного вооружения, сложенного вдоль сырой каменной кладки. Сомов с невозмутимым спокойствием достал табельный револьвер и жестом велел двум матросам следовать за ним во тьму подземелья.",
+        nextAuthor: "@dmitry_v",
+        nextFrag: "106",
+        nextTranslation: "Спуск казался бесконечным, уходя на двадцать саженей ниже уровня моря, где глухой гул океанского прибоя заставлял вибрировать холодные базальтовые стены твердыни."
+      }
+    };
+
+    let currentFragmentId = 104;
+    let targetPrevId = 103;
+    let targetNextId = 105;
+    let targetPendingFragment = null;
+
+    // 7. Модальное окно переключения фрагмента ("Вы закончили перевод фрагмента?")
+    const switchModal = document.getElementById('switch-modal');
+    const switchModalCard = document.getElementById('switch-modal-card');
+    const switchModalSubtitle = document.getElementById('switch-modal-subtitle');
+    const switchModalDesc = document.getElementById('switch-modal-desc');
+    const modalSwitchCancel = document.getElementById('modal-switch-cancel');
+    const modalSwitchSkip = document.getElementById('modal-switch-skip');
+    const modalSwitchConfirm = document.getElementById('modal-switch-confirm');
+
+    window.promptSwitchFocus = function(targetFragId) {
+      if (!fragmentsDB[targetFragId]) {
+        showToastNotice(`Фрагмент #${targetFragId} пока не подготовлен`);
+        return;
+      }
+      if (targetFragId === currentFragmentId) {
+        showToastNotice(`Вы уже находитесь в микрофрагменте #${currentFragmentId}`);
+        return;
+      }
+
+      targetPendingFragment = targetFragId;
+      switchModalSubtitle.textContent = `Переход к микрофрагменту #${targetFragId}`;
+      switchModalDesc.textContent = `Вы собираетесь перейти к микрофрагменту #${targetFragId}. Выберите, подтвердить ли завершение перевода текущего фрагмента #${currentFragmentId} или пропустить его.`;
+
+      switchModal.classList.remove('opacity-0', 'pointer-events-none');
+      switchModal.classList.add('opacity-100');
+      switchModalCard.classList.remove('scale-95');
+      switchModalCard.classList.add('scale-100');
+    };
+
+    function closeSwitchModal() {
+      switchModal.classList.remove('opacity-100');
+      switchModal.classList.add('opacity-0', 'pointer-events-none');
+      switchModalCard.classList.remove('scale-100');
+      switchModalCard.classList.add('scale-95');
+      targetPendingFragment = null;
+    }
+
+    modalSwitchCancel.addEventListener('click', closeSwitchModal);
+    switchModal.addEventListener('click', (e) => {
+      if (e.target === switchModal) closeSwitchModal();
+    });
+
+    // Вариант 1: "Да, закончил" — подтверждаем и переходим
+    modalSwitchConfirm.addEventListener('click', () => {
+      const targetId = targetPendingFragment;
+      closeSwitchModal();
+      loadFragment(targetId, true);
+    });
+
+    // Вариант 2: "Нет, пропустить" — переходим без публикации
+    modalSwitchSkip.addEventListener('click', () => {
+      const targetId = targetPendingFragment;
+      closeSwitchModal();
+      loadFragment(targetId, false);
+    });
+
+    function loadFragment(fragId, isFinished) {
+      const data = fragmentsDB[fragId];
+      if (!data) return;
+
+      const leftContainer = document.getElementById('left-scroll-container');
+      const centerContainer = document.getElementById('center-scroll-container');
+
+      leftContainer.classList.add('opacity-0');
+      centerContainer.classList.add('opacity-0');
+
+      setTimeout(() => {
+        const oldId = currentFragmentId;
+        currentFragmentId = data.id;
+        targetPrevId = data.prevId;
+        targetNextId = data.nextId;
+
+        // Обновляем шапку
+        document.getElementById('header-frag-number').textContent = `#${data.id}`;
+        document.getElementById('header-frag-words').textContent = `${data.words} слов`;
+
+        // Обновляем левую колонку
+        document.getElementById('label-context-before').textContent = `Контекст до • фрагмент #${data.prevId}`;
+        document.getElementById('context-before').textContent = data.contextBefore;
+        document.getElementById('label-current-frag').textContent = `Микрофрагмент #${data.id}`;
+        document.getElementById('label-current-words').textContent = `${data.words} слов`;
+        document.getElementById('original-text').textContent = data.originalText;
+        document.getElementById('label-context-after').textContent = `Контекст после • фрагмент #${data.nextId}`;
+        document.getElementById('context-after').textContent = data.contextAfter;
+
+        // Обновляем центральную колонку
+        document.getElementById('prev-author-name').textContent = data.prevAuthor;
+        document.getElementById('prev-frag-label').textContent = `• перевод фрагмента #${data.prevFrag}`;
+        document.getElementById('prev-translation-text').textContent = data.prevTranslation;
+
+        document.getElementById('current-editor-label').textContent = `Ваш перевод фрагмента #${data.id}`;
+        translationTextarea.value = data.translation;
+        savedContent = data.translation;
+
+        document.getElementById('next-author-name').textContent = data.nextAuthor;
+        document.getElementById('next-frag-label').textContent = `• перевод следующего фрагмента #${data.nextFrag}`;
+        document.getElementById('next-translation-text').textContent = data.nextTranslation;
+
+        updateWordStats();
+
+        leftContainer.scrollTop = 0;
+        centerContainer.scrollTop = 0;
+
+        leftContainer.classList.remove('opacity-0');
+        centerContainer.classList.remove('opacity-0');
+
+        if (isFinished) {
+          showToastNotice(`Перевод фрагмента #${oldId} сохранен! Загружен фрагмент #${fragId}`, 'check', true);
+        } else {
+          showToastNotice(`Фрагмент #${oldId} пропущен. Загружен фрагмент #${fragId}`, 'chevrons-right', false);
+        }
+      }, 250);
+    }
+
+    // 8. Поиск по глоссарию
+    const glossarySearch = document.getElementById('glossary-search');
+    const glossaryItems = document.querySelectorAll('.glossary-item');
+
+    glossarySearch.addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      let matchCount = 0;
+      glossaryItems.forEach(item => {
+        const text = item.textContent.toLowerCase();
+        if (text.includes(query)) {
+          item.style.display = 'block';
+          matchCount++;
+        } else {
+          item.style.display = 'none';
+        }
+      });
+      document.getElementById('glossary-count-badge').textContent = `${matchCount} терминов`;
+    });
+
+    // Клик по термину — копирование и уведомление
+    window.copyTerm = function(en, ru) {
+      navigator.clipboard?.writeText(ru).catch(() => {});
+      showToastNotice(`Термин «${ru}» скопирован в буфер`, 'copy');
+    };
+
+    // Кнопка возврата в каталог
+    document.getElementById('btn-back-queue').addEventListener('click', () => {
+      showToastNotice("Возврат к списку микрофрагментов книги...");
+    });
+
+    // 9. Горячие клавиши (Ctrl+S, Ctrl+Enter, Esc)
+    document.addEventListener('keydown', (e) => {
+      // Ctrl+S / Cmd+S: Сохранить черновик
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'ы')) {
+        e.preventDefault();
+        saveDraft();
+      }
+      // Ctrl+Enter / Cmd+Enter: Отправить перевод
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        publishTranslation();
+      }
+      // Esc: Закрыть открытые модалки
+      if (e.key === 'Escape') {
+        if (!switchModal.classList.contains('opacity-0')) closeSwitchModal();
+        if (!forkModal.classList.contains('opacity-0')) closeForkModal();
+      }
+    });
+
+    // 10. Регулировка кегля шрифта текста
+    const sizes = ['text-[17px]', 'text-[19px]', 'text-[21px]'];
+    let curSize = 1;
+    document.getElementById('font-inc').addEventListener('click', () => {
+      if (curSize < sizes.length - 1) {
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.remove(sizes[curSize]));
+        curSize++;
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.add(sizes[curSize]));
+      }
+    });
+    document.getElementById('font-dec').addEventListener('click', () => {
+      if (curSize > 0) {
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.remove(sizes[curSize]));
+        curSize--;
+        document.querySelectorAll('.reader-text, .seamless-textarea').forEach(el => el.classList.add(sizes[curSize]));
+      }
+    });
+  </script>
+</body>
+</html>

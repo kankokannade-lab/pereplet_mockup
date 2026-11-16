@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Переплёт — Режим Читателя</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Fonts: Inter, Lora & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Lora', 'Georgia', 'serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            paper: {
+              DEFAULT: '#FAF8F5',
+              50: '#FDFCFB',
+              100: '#F7F4EC',
+              200: '#EFE9DC',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Плавные минималистичные скроллбары */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #E2E8F0; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #CBD5E1; }
+
+    /* Буквица для первого абзаца */
+    .drop-cap::first-letter {
+      font-size: 3.8rem;
+      line-height: 0.85;
+      float: left;
+      margin-top: 0.15rem;
+      margin-right: 0.75rem;
+      margin-bottom: -0.1rem;
+      font-family: 'Lora', Georgia, serif;
+      font-weight: 600;
+      color: #312E81; /* indigo-900 */
+    }
+
+    /* Анимации для сайдбара и звезд */
+    .sidebar-transition {
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+    }
+
+    .star-hover {
+      transition: transform 0.15s ease, color 0.15s ease, fill 0.15s ease;
+    }
+    .star-hover:hover {
+      transform: scale(1.18);
+    }
+
+    /* Плавный скролл */
+    html {
+      scroll-behavior: smooth;
+    }
+  </style>
+</head>
+<body class="h-full bg-paper font-sans text-slate-800 flex flex-col overflow-hidden select-text">
+
+  <!-- 0. ПОЛОСА ПРОГРЕССА ЧТЕНИЯ (STICKY TOP) -->
+  <div class="fixed top-0 left-0 right-0 h-1 bg-stone-200/60 z-50">
+    <div id="reading-progress-bar" class="h-full bg-indigo-600 w-0 transition-all duration-150"></div>
+  </div>
+
+  <!-- 1. HEADER (ВЕРХНЯЯ ПАНЕЛЬ - ПРИКРЕПЛЕННАЯ, ПОЛУПРОЗРАЧНАЯ) -->
+  <header class="h-14 bg-paper/90 backdrop-blur-md border-b border-stone-200/90 px-4 sm:px-6 flex items-center justify-between shrink-0 z-40 sticky top-0 transition-colors">
+    
+    <!-- Левая секция: Кнопка назад + Переключатель оглавления -->
+    <div class="flex items-center gap-3 sm:gap-4">
+      <button id="btn-back-library" class="inline-flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-indigo-600 transition group py-1.5 px-2.5 rounded-lg hover:bg-stone-200/60" title="Вернуться в каталог книг">
+        <i data-lucide="arrow-left" class="w-4 h-4 text-stone-400 group-hover:text-indigo-600 transition-transform group-hover:-translate-x-0.5"></i>
+        <span class="hidden sm:inline">В библиотеку</span>
+      </button>
+
+      <div class="h-4 w-px bg-stone-300"></div>
+
+      <!-- Кнопка скрытия/показа сайдбара -->
+      <button id="btn-toggle-sidebar" class="inline-flex items-center gap-2 text-xs font-medium text-stone-600 hover:text-indigo-700 bg-stone-100 hover:bg-stone-200/70 border border-stone-200/80 px-2.5 py-1.5 rounded-lg transition" title="Открыть или скрыть оглавление">
+        <i data-lucide="panel-left" class="w-4 h-4 text-stone-500"></i>
+        <span class="hidden md:inline" id="sidebar-toggle-text">Оглавление</span>
+      </button>
+    </div>
+
+    <!-- Центральная секция: Название книги и главы -->
+    <div class="flex flex-col items-center justify-center text-center px-2 max-w-[45%] truncate">
+      <div class="flex items-center gap-2 truncate">
+        <h1 class="text-xs sm:text-sm font-semibold text-slate-900 tracking-tight truncate">Экспедиция в Неизведанное</h1>
+        <span class="text-stone-300 hidden sm:inline">•</span>
+        <span class="text-xs text-stone-500 font-medium hidden sm:inline truncate">Глава II. Залив полуночных ветров</span>
+      </div>
+      <span class="text-[11px] text-stone-400 font-mono sm:hidden truncate">Глава II. Залив полуночных ветров</span>
+    </div>
+
+    <!-- Правая секция: Бейдж статуса ветки + Инструменты чтения (A-, A+) -->
+    <div class="flex items-center gap-3">
+      
+      <!-- Бейдж ветки -->
+      <div class="hidden lg:flex items-center gap-2 bg-emerald-50/90 border border-emerald-200/70 px-3 py-1 rounded-full text-xs" title="Текущая ветка утверждена как Канон благодаря оценкам читателей">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span class="text-emerald-900 font-medium">Ветка: Канон (Классический стиль)</span>
+        <span class="text-emerald-300">•</span>
+        <span class="text-emerald-700 font-mono font-semibold">★ 4.9</span>
+      </div>
+
+      <!-- Компактный бейдж для средних экранов -->
+      <div class="flex lg:hidden items-center gap-1.5 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full text-[11px]" title="Канон">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <span class="text-emerald-900 font-medium">Канон</span>
+      </div>
+
+      <div class="h-4 w-px bg-stone-300 hidden sm:block"></div>
+
+      <!-- Кнопки изменения размера шрифта (A- и A+) -->
+      <div class="flex items-center bg-stone-100/90 border border-stone-200/90 rounded-lg p-0.5 text-xs text-stone-700 shadow-2xs">
+        <button id="font-dec" title="Уменьшить кегль шрифта" class="px-2.5 py-1 hover:bg-white hover:text-indigo-600 rounded-md transition font-serif font-bold text-xs active:scale-95">
+          A-
+        </button>
+        <div class="w-px h-3 bg-stone-200"></div>
+        <button id="font-inc" title="Увеличить кегль шрифта" class="px-2.5 py-1 hover:bg-white hover:text-indigo-600 rounded-md transition font-serif font-bold text-sm active:scale-95">
+          A+
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- 2. ОСНОВНОЙ КОНТЕЙНЕР (САЙДБАР + ОБЛАСТЬ ЧТЕНИЯ) -->
+  <div class="flex-1 flex overflow-hidden relative">
+
+    <!-- ЛЕВЫЙ САЙДБАР НАВИГАЦИИ (250px, скрываемый) -->
+    <aside id="sidebar-toc" class="w-[270px] bg-paper-50 border-r border-stone-200/80 flex flex-col shrink-0 sidebar-transition z-30 h-full overflow-hidden">
+      
+      <!-- Шапка сайдбара -->
+      <div class="h-12 px-4 border-b border-stone-200/70 bg-stone-100/50 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2 text-xs font-semibold text-slate-800 uppercase tracking-wider font-mono">
+          <i data-lucide="book-open" class="w-4 h-4 text-indigo-600"></i>
+          <span>Оглавление</span>
+        </div>
+        <button id="btn-close-sidebar" class="text-stone-400 hover:text-slate-800 p-1 rounded-md hover:bg-stone-200/50 transition" title="Скрыть оглавление">
+          <i data-lucide="chevrons-left" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <!-- Карточка информации о книге и ветке -->
+      <div class="p-3.5 border-b border-stone-200/70 bg-stone-50/70">
+        <div class="text-[11px] font-mono uppercase tracking-wider text-stone-400 mb-1">Книга перевода</div>
+        <div class="text-xs font-bold text-slate-900 leading-snug">«Экспедиция в Неизведанное»</div>
+        <div class="text-[11px] text-stone-500 mt-1 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span>Ветка: Канон (100% готовность)</span>
+        </div>
+      </div>
+
+      <!-- Список глав -->
+      <nav class="flex-1 overflow-y-auto p-2.5 space-y-1 text-xs">
+        
+        <!-- Глава 1 -->
+        <a href="#top" onclick="showToastNotice('Переход к Главе I'); return false;" class="group flex flex-col p-2.5 rounded-xl hover:bg-white text-stone-600 hover:text-slate-900 transition-colors border border-transparent hover:border-stone-200/70">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-mono text-[10px] text-stone-400 uppercase tracking-wider">Глава I</span>
+            <span class="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium flex items-center gap-1">
+              <i data-lucide="check" class="w-3 h-3 text-emerald-600"></i> Канон 4.9★
+            </span>
+          </div>
+          <div class="font-serif text-[13px] font-medium text-slate-800 leading-snug">На исходе сумерек</div>
+          <span class="text-[10px] text-stone-400 mt-1">12 фрагментов • 100% вычитано</span>
+        </a>
+
+        <!-- Глава 2: ТЕКУЩАЯ АКТИВНАЯ ГЛАВА -->
+        <div class="flex flex-col p-2.5 rounded-xl bg-white shadow-2xs border border-indigo-200/80 relative">
+          <div class="absolute left-0 top-3 bottom-3 w-1 bg-indigo-600 rounded-r"></div>
+          <div class="flex items-center justify-between mb-1 pl-1">
+            <span class="font-mono text-[10px] text-indigo-700 uppercase font-semibold tracking-wider flex items-center gap-1">
+              <i data-lucide="bookmark" class="w-3 h-3 text-indigo-600"></i> Текущая • Глава II
+            </span>
+            <span class="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded font-semibold">
+              ★ 4.8
+            </span>
+          </div>
+          <div class="font-serif text-[14px] font-bold text-slate-900 leading-snug pl-1">Залив полуночных ветров</div>
+          <span class="text-[10px] text-stone-500 mt-1 pl-1">15 микрофрагментов • чтение</span>
+        </div>
+
+        <!-- Глава 3 -->
+        <a href="#top" onclick="showToastNotice('Глава III будет открыта по кнопке «Следующая глава»'); return false;" class="group flex flex-col p-2.5 rounded-xl hover:bg-white text-stone-600 hover:text-slate-900 transition-colors border border-transparent hover:border-stone-200/70">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-mono text-[10px] text-stone-400 uppercase tracking-wider">Глава III</span>
+            <span class="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+              Draft 4.3★
+            </span>
+          </div>
+          <div class="font-serif text-[13px] font-medium text-slate-700 leading-snug">В недрах твердыни</div>
+          <span class="text-[10px] text-stone-400 mt-1">Стыки на вычитке бета-ридеров</span>
+        </a>
+
+        <!-- Глава 4 -->
+        <a href="#top" onclick="showToastNotice('Глава IV еще переводится сообществом'); return false;" class="group flex flex-col p-2.5 rounded-xl hover:bg-white text-stone-600 hover:text-slate-900 transition-colors border border-transparent hover:border-stone-200/70 opacity-75">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-mono text-[10px] text-stone-400 uppercase tracking-wider">Глава IV</span>
+            <span class="text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-medium">
+              Перевод: 68%
+            </span>
+          </div>
+          <div class="font-serif text-[13px] font-medium text-slate-600 leading-snug">Древний маяк</div>
+          <span class="text-[10px] text-stone-400 mt-1">Осталось 5 микрофрагментов</span>
+        </a>
+
+        <!-- Глава 5 -->
+        <a href="#top" onclick="showToastNotice('Глава V ожидает переводчиков'); return false;" class="group flex flex-col p-2.5 rounded-xl hover:bg-white text-stone-500 hover:text-slate-900 transition-colors border border-transparent hover:border-stone-200/70 opacity-60">
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-mono text-[10px] text-stone-400 uppercase tracking-wider">Глава V</span>
+            <span class="text-[10px] text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded font-medium">
+              В очереди
+            </span>
+          </div>
+          <div class="font-serif text-[13px] font-medium text-slate-600 leading-snug">Карта полярных течений</div>
+          <span class="text-[10px] text-stone-400 mt-1">Оригинал загружен</span>
+        </a>
+
+      </nav>
+
+      <!-- Подвал сайдбара: переключение в режим переводчика -->
+      <div class="p-3 border-t border-stone-200/80 bg-stone-100/40 text-[11px] text-stone-500">
+        <a href="#" onclick="showToastNotice('Переход в рабочее пространство переводчика'); return false;" class="flex items-center justify-between text-indigo-600 hover:text-indigo-800 font-medium">
+          <span class="flex items-center gap-1.5">
+            <i data-lucide="languages" class="w-3.5 h-3.5"></i>
+            Хотите переводить?
+          </span>
+          <i data-lucide="arrow-right" class="w-3 h-3"></i>
+        </a>
+      </div>
+
+    </aside>
+
+    <!-- ОВЕРЛЕЙ ДЛЯ МОБИЛЬНЫХ ЭКРАНОВ ПРИ ОТКРЫТОМ САЙДБАРЕ -->
+    <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/40 backdrop-blur-2xs z-20 hidden md:hidden transition-opacity"></div>
+
+    <!-- 3. MAIN CONTENT (ЦЕНТРАЛЬНАЯ КОЛОНКА ДЛЯ ЧТЕНИЯ) -->
+    <main id="main-scroll-container" class="flex-1 overflow-y-auto bg-paper px-4 sm:px-8 md:px-12 py-10 sm:py-16">
+      
+      <!-- Широкий, отцентрированный контейнер для комфортного чтения (max-w-3xl) -->
+      <article class="max-w-3xl mx-auto">
+        
+        <!-- Метаданные главы и книги -->
+        <header class="mb-12 text-center border-b border-stone-200/80 pb-10">
+          
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-stone-100/90 border border-stone-200 text-stone-600 text-[11px] font-mono uppercase tracking-wider mb-4">
+            <span>Экспедиция в Неизведанное</span>
+            <span class="text-stone-300">•</span>
+            <span>Книга I</span>
+          </div>
+
+          <!-- Крупный заголовок главы -->
+          <h1 class="font-serif text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 tracking-tight mb-4">
+            Глава II. Залив полуночных ветров
+          </h1>
+
+          <!-- Детали перевода ветки -->
+          <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-stone-500">
+            <span class="flex items-center gap-1.5">
+              <i data-lucide="git-merge" class="w-3.5 h-3.5 text-indigo-600"></i>
+              <span>Ветка: <strong class="text-slate-700 font-semibold">Канон (Классический)</strong></span>
+            </span>
+            <span class="text-stone-300">•</span>
+            <span class="flex items-center gap-1">
+              <i data-lucide="users" class="w-3.5 h-3.5 text-stone-400"></i>
+              <span>Перевод: <strong class="text-slate-700">Сообщество «Переплёт»</strong></span>
+            </span>
+            <span class="text-stone-300">•</span>
+            <span class="flex items-center gap-1 font-mono">
+              <i data-lucide="clock" class="w-3.5 h-3.5 text-stone-400"></i>
+              <span>~7 мин чтения</span>
+            </span>
+          </div>
+        </header>
+
+        <!-- СПЛОШНОЙ, КРАСИВО СВЕРСТАННЫЙ ТЕКСТ КНИГИ (Шрифт Lora, leading-loose) -->
+        <div id="reader-body" class="font-serif text-[19px] sm:text-[20px] leading-[2.1] text-slate-800 space-y-8 select-text transition-all duration-200">
+          
+          <!-- Абзац 1 (с буквицей) -->
+          <p class="drop-cap text-justify hyphens-auto">
+            Экспедиционное судно «Северная Звезда» бросило якорь в тот самый миг, когда тяжелые лиловые сумерки окончательно поглотили скалистую бухту. На верхней палубе собрались офицеры и штурманский состав, склонившись над старинными навигационными планшетами при тусклом свете штормовых латунных фонарей. Ветер, неистовствовавший последние трое суток у кромки полярных льдов, наконец почти полностью утих, сменившись мерной, обманчиво спокойной зыбью северного прилива. Волны глухо рокотали о просмоленный дубовый борт, отдаваясь в трюме протяжным древесным стоном. Капитан Сомов бережно свернул пожелтевшую карту залива, сознавая лучше любого другого на борту: малейшая оплошность среди скрытых приливом подводных рифов способна стоить им не только потерянных недель пути, но и жизней всей исследовательской группы.
+          </p>
+
+          <!-- Абзац 2 -->
+          <p class="text-justify hyphens-auto">
+            Не говоря ни слова, Сомов приблизился к мокрому планширю и отдал короткий, резкий приказ спустить две гребные шлюпки на воду. Матросы принялись за работу в глубокой, сосредоточенной тишине, нарушаемой лишь свистом блоков и натянутых пеньковых канатов. Каждый из них чувствовал близость гранитных утесов, вздымавшихся из ледяной воды черными неприступными исполинами. Через несколько минут тяжелые весла одновременно погрузились в темную воду залива, направляя ход шлюпки к далекому силуэту старой навигационной башни. В шлюпке никто не вспоминал вслух о трагических событиях предыдущей гидрографической экспедиции сороковых годов. Официальный рапорт покоился в секретных архивах Морского министерства, однако каждый матрос на веслах с детства слышал шепотом передаваемые предания о мрачном безмолвии этого всеми забытого фиорда.
+          </p>
+
+          <!-- Абзац 3 -->
+          <p class="text-justify hyphens-auto">
+            Сырой ночной воздух был напоен резким, почти осязаемым запахом гниющих бурых водорослей, йода и преющих сосновых бревен полуразрушенного деревянного мола. Лейтенант Морозов первым выпрыгнул из носовой части шлюпки на осклизлые прибрежные камни, ловким движением захлестнув тяжелый швартовный трос вокруг наполовину вросшего в скалу чугунного кнехта. Над их головами из клубящегося тумана медленно выплывал исполинский силуэт старого маяка. Его массивные гранитные грани казались монолитом, высеченным неведомой рукой прямо из тела утеса, а высокие узкие окна заброшенного фонарного яруса тускло отражали холодное сияние первых осенних звезд. Под сапогами хрустели ракушки и битый базальт, а каждый шаг людей отдавался гулким, неестественно звонким эхом в сырых каменных теснинах ущелья.
+          </p>
+
+          <!-- Абзац 4 -->
+          <p class="text-justify hyphens-auto">
+            Тропа, огибавшая маячную скалу, круто забирала вверх, выводя высадившийся отряд к массивным арочным воротам крепости. Сомов высоко поднял зажженный латунный фонарь, направляя луч на монолитную базальтовую притолоку, покрытую густым слоем бурого лишайника. Под его теплым светом проступили выбитые резцом лаконичные буквы: «Твердыня Северного Ветра, 1842». Замочная скважина замка была наглухо залита зеленоватой патиной и ржавчиной, однако тяжелый кованый засов из полосового железа оказался поднят и отведен в сторону. Кто-то отпер эти ворота изнутри задолго до их прибытия, словно заранее ожидая незваных гостей из столицы.
+          </p>
+
+          <!-- Абзац 5 -->
+          <p class="text-justify hyphens-auto">
+            Стоило матросам навалиться на кованую створку, как петли отозвались протяжным, надсадным скрежетом, разорвавшим многолетнее безмолвие бастиона. Из распахнувшегося темного зева навстречу людям хлынул порыв спертого, ледяного подземного воздуха с примесью серы и вековой пыли. Этот резкий сквозняк мгновенно задул спичку лейтенанта Морозова, едва тот успел поднести ее к просмоленному фитилю ручного факела. Они замерли на пороге, затаив дыхание и вглядываясь в проем. В темноте угадывалась колоссальная винтовая лестница с крутыми гранитными ступенями, уходящая по спирали глубоко в коренную породу острова, в самое сердце недр, где ни разу не бывал солнечный луч.
+          </p>
+
+          <!-- Абзац 6 -->
+          <p class="text-justify hyphens-auto">
+            Своды галереи сочились ледяной влагой, которая мерно и неумолимо срывалась вниз, отбивая четкий ритмичный такт по гранитным плитам пола. Морозов наконец запалил факел со второй попытки. В пляшущих багровых отсветах огня отряд увидел длинные стеллажи, заставленные ящиками морского вооружения, покрытыми толстым слоем консервационной смазки и известкового налета. Ни ржавчина, ни время не тронули тяжелые замки орудийных лафетов. Но самым поразительным было другое: на центральном круглом столе из мореного дуба лежал развернутый чертеж с пометками свежими чернилами. Сомов наклонился к документу, и его пальцы дрогнули — перед ними лежала точная карта глубин залива, дополненная маршрутами, которых не было ни в одном официальном атласе империи.
+          </p>
+
+          <!-- Абзац 7 -->
+          <p class="text-justify hyphens-auto">
+            Капитан медленно оглядел притихших спутников. Становилось очевидно, что форт никогда не был по-настоящему заброшен: кто-то методично вел наблюдения за течениями и приливами все эти сорок лет, терпеливо дожидаясь момента, когда к берегам фиорда вновь пристанет исследовательский корабль. Снизу, из неизведанных глубин винтовой шахты, донесся приглушенный низкий гул — то ли подземное эхо океанского прибоя, разбивающегося о скрытые пещеры, то ли предупреждение тем, кто осмелился переступить порог Твердыни. Сомов жестом подозвал Морозова, спрятал карту в непромокаемый планшет и сделал первый решительный шаг по холодным каменным ступеням вниз.
+          </p>
+
+        </div>
+
+        <!-- Разделитель конца главы (Орнамент) -->
+        <div class="my-14 flex items-center justify-center gap-3 text-stone-300">
+          <div class="h-px w-16 bg-stone-300"></div>
+          <i data-lucide="feather" class="w-4 h-4 text-stone-400"></i>
+          <div class="h-px w-16 bg-stone-300"></div>
+        </div>
+
+        <!-- 4. БЛОК ОЦЕНКИ (END OF CHAPTER) - САМОЕ ВАЖНОЕ -->
+        <section id="rating-section" class="bg-white rounded-2xl border border-stone-200/90 shadow-sm p-6 sm:p-8 relative overflow-hidden transition-all duration-300 hover:border-indigo-200">
+          
+          <!-- Декоративный акцентный уголок -->
+          <div class="absolute -right-8 -top-8 w-28 h-28 bg-indigo-50/60 rounded-full blur-xl pointer-events-none"></div>
+
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8 relative z-10">
+            
+            <!-- Левая часть: Призыв и Интерактивные 5 звезд -->
+            <div class="flex-1 space-y-4">
+              
+              <!-- Заголовок оценки перевода -->
+              <div>
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                    <i data-lucide="sparkles" class="w-3 h-3 text-indigo-600"></i>
+                    Вклад читателя
+                  </span>
+                  <span class="text-xs text-stone-400 font-mono">Глава II завершена</span>
+                </div>
+                <h3 class="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
+                  Как вам качество перевода этой главы от сообщества?
+                </h3>
+                <p class="text-xs sm:text-sm text-stone-500 mt-1 leading-relaxed">
+                  Ваша оценка напрямую формирует репутацию переводчиков ветки и определяет, закрепится ли этот перевод как канонический.
+                </p>
+              </div>
+
+              <!-- Интерактивные 5 звезд -->
+              <div class="flex flex-col sm:flex-row sm:items-center gap-3 pt-1">
+                <div id="stars-container" class="flex items-center gap-1.5">
+                  <!-- Звезды 1..5 генерируются / инициализируются -->
+                  <button type="button" data-star="1" class="star-btn p-1 text-stone-300 hover:text-amber-400 star-hover transition-colors focus:outline-none" title="1 из 5: Слабый перевод">
+                    <svg class="w-8 h-8 star-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </button>
+                  <button type="button" data-star="2" class="star-btn p-1 text-stone-300 hover:text-amber-400 star-hover transition-colors focus:outline-none" title="2 из 5: Нужна доработка">
+                    <svg class="w-8 h-8 star-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </button>
+                  <button type="button" data-star="3" class="star-btn p-1 text-stone-300 hover:text-amber-400 star-hover transition-colors focus:outline-none" title="3 из 5: Приемлемо">
+                    <svg class="w-8 h-8 star-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </button>
+                  <button type="button" data-star="4" class="star-btn p-1 text-stone-300 hover:text-amber-400 star-hover transition-colors focus:outline-none" title="4 из 5: Хороший литературный перевод">
+                    <svg class="w-8 h-8 star-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </button>
+                  <button type="button" data-star="5" class="star-btn p-1 text-stone-300 hover:text-amber-400 star-hover transition-colors focus:outline-none" title="5 из 5: Великолепно, достоин Канона!">
+                    <svg class="w-8 h-8 star-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                  </button>
+                </div>
+
+                <!-- Текстовая подсказка при наведении / клике -->
+                <div id="rating-label" class="text-xs font-medium text-stone-400 h-6 flex items-center">
+                  Нажмите на звезду, чтобы поставить оценку
+                </div>
+              </div>
+
+              <!-- Две небольшие кнопки: Донат и Пожаловаться -->
+              <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-stone-100">
+                <button id="btn-donate" type="button" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 transition active:scale-95" title="Отправить донат переводчикам этой главы">
+                  <i data-lucide="coffee" class="w-4 h-4 text-amber-600"></i>
+                  <span>Поддержать переводчиков (Донат)</span>
+                </button>
+
+                <button id="btn-report" type="button" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-stone-600 hover:text-rose-600 bg-stone-100 hover:bg-rose-50 border border-stone-200/80 hover:border-rose-200 transition active:scale-95" title="Сообщить о несогласованности, опечатке или стилистической ошибке">
+                  <i data-lucide="flag" class="w-4 h-4 text-stone-400 group-hover:text-rose-600"></i>
+                  <span>Пожаловаться на ошибки</span>
+                </button>
+              </div>
+
+            </div>
+
+            <!-- Правая часть: Большая кнопка «Следующая глава →» -->
+            <div class="lg:w-72 flex flex-col justify-center items-stretch shrink-0 border-t lg:border-t-0 lg:border-l border-stone-200/80 pt-6 lg:pt-0 lg:pl-8">
+              <div class="text-[11px] font-mono uppercase tracking-wider text-stone-400 mb-1.5 text-center lg:text-left">
+                Продолжить чтение
+              </div>
+              
+              <button id="btn-next-chapter" type="button" class="inline-flex items-center justify-between gap-3 px-6 py-4 rounded-xl text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-indigo-500/20 transition active:scale-95 group">
+                <div class="text-left">
+                  <div class="text-xs font-normal text-indigo-200">Перейти дальше</div>
+                  <div class="text-sm font-semibold">Следующая глава →</div>
+                </div>
+                <i data-lucide="arrow-right" class="w-5 h-5 text-indigo-200 group-hover:translate-x-1 group-hover:text-white transition-transform"></i>
+              </button>
+
+              <div class="mt-2 text-center lg:text-left text-[11px] text-stone-400">
+                Глава III. В недрах твердыни
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+
+        <!-- Подвал страницы чтения -->
+        <footer class="mt-16 text-center text-xs text-stone-400 pb-12 space-y-2">
+          <p>© 2026 Платформа коллективного перевода «Переплёт»</p>
+          <p class="text-[11px] text-stone-400">
+            Текст собран из 15 микрофрагментов, переведенных сообществом. Канонический статус поддерживается читательским консенсусом.
+          </p>
+        </footer>
+
+      </article>
+
+    </main>
+
+  </div>
+
+  <!-- 5. TOAST FEEDBACK УВЕДОМЛЕНИЯ -->
+  <div id="toast" class="fixed top-5 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs font-medium flex items-center gap-3 transform -translate-y-20 opacity-0 transition-all duration-300 pointer-events-none z-50 border border-slate-800">
+    <div id="toast-icon-wrapper" class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+      <i id="toast-icon" data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+    </div>
+    <span id="toast-text" class="leading-snug">Уведомление</span>
+  </div>
+
+  <!-- 6. МОДАЛЬНОЕ ОКНО: ПОДДЕРЖАТЬ ПЕРЕВОДЧИКОВ (ДОНАТ) -->
+  <div id="donate-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="donate-modal-card" class="bg-white rounded-2xl p-6 sm:p-7 max-w-[480px] w-full mx-4 shadow-2xl border border-stone-200 transform scale-95 transition-transform duration-200">
+      
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+          <i data-lucide="coffee" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Поддержать переводчиков</h3>
+          <p class="text-xs text-stone-500">Глава II. Залив полуночных ветров</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-stone-600 leading-relaxed mb-4">
+        Донат распределяется между активными переводчиками этой главы пропорционально переведенным словам и бета-ридерам, вычитавшим стыки.
+      </p>
+
+      <!-- Авторы главы -->
+      <div class="p-3 bg-stone-50 rounded-xl border border-stone-200/80 mb-5 text-xs">
+        <div class="font-semibold text-slate-700 mb-1.5 text-[11px] font-mono uppercase tracking-wider">Участники главы:</div>
+        <div class="flex flex-wrap gap-2">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-stone-200 rounded text-slate-700 text-[11px]">
+            <i data-lucide="user" class="w-3 h-3 text-indigo-500"></i> @alisa_lingua (45%)
+          </span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-stone-200 rounded text-slate-700 text-[11px]">
+            <i data-lucide="user" class="w-3 h-3 text-indigo-500"></i> @mikhail_t (35%)
+          </span>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-stone-200 rounded text-slate-700 text-[11px]">
+            <i data-lucide="user" class="w-3 h-3 text-emerald-500"></i> @ivan_pro (20%)
+          </span>
+        </div>
+      </div>
+
+      <!-- Выбор суммы -->
+      <div class="mb-5">
+        <label class="block text-xs font-semibold text-slate-700 mb-2">Выберите сумму поддержки:</label>
+        <div class="grid grid-cols-4 gap-2">
+          <button type="button" class="donate-chip py-2 px-3 text-xs font-semibold rounded-lg border border-stone-200 hover:border-amber-400 bg-white hover:bg-amber-50 text-slate-700 transition" onclick="selectDonation(100, this)">100 ₽</button>
+          <button type="button" class="donate-chip py-2 px-3 text-xs font-semibold rounded-lg border border-amber-300 bg-amber-50 text-amber-900 transition" onclick="selectDonation(300, this)">300 ₽</button>
+          <button type="button" class="donate-chip py-2 px-3 text-xs font-semibold rounded-lg border border-stone-200 hover:border-amber-400 bg-white hover:bg-amber-50 text-slate-700 transition" onclick="selectDonation(500, this)">500 ₽</button>
+          <button type="button" class="donate-chip py-2 px-3 text-xs font-semibold rounded-lg border border-stone-200 hover:border-amber-400 bg-white hover:bg-amber-50 text-slate-700 transition" onclick="selectDonation(1000, this)">1000 ₽</button>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 w-full pt-2">
+        <button id="modal-donate-cancel" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-500 bg-transparent hover:bg-stone-100 transition active:scale-95">
+          Отмена
+        </button>
+        <button id="modal-donate-confirm" type="button" class="px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 shadow-xs transition active:scale-95 inline-flex items-center gap-2">
+          <i data-lucide="heart" class="w-4 h-4 fill-white"></i>
+          <span>Отправить донат</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 7. МОДАЛЬНОЕ ОКНО: ПОЖАЛОВАТЬСЯ НА ОШИБКИ -->
+  <div id="report-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs opacity-0 pointer-events-none transition-opacity duration-200">
+    <div id="report-modal-card" class="bg-white rounded-2xl p-6 sm:p-7 max-w-[480px] w-full mx-4 shadow-2xl border border-stone-200 transform scale-95 transition-transform duration-200">
+      
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Сообщить об ошибке перевода</h3>
+          <p class="text-xs text-stone-500">Глава II. Залив полуночных ветров</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-stone-600 leading-relaxed mb-4">
+        Сигнал поступит бета-ридерам и переводчикам ветки. При критических расхождениях спорный стык отправится на повторную модерацию.
+      </p>
+
+      <!-- Тип проблемы -->
+      <div class="mb-4">
+        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Категория проблемы:</label>
+        <select id="report-category" class="w-full bg-white border border-stone-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-indigo-400 text-slate-800">
+          <option value="style">Несогласованный стиль / ломка ритма повествования</option>
+          <option value="glossary">Нарушение глоссария ветки (неверный термин)</option>
+          <option value="grammar">Грамматическая или синтаксическая ошибка</option>
+          <option value="stitch">Нестыковка на границе микрофрагментов</option>
+          <option value="missing">Искажение смысла оригинала книги</option>
+        </select>
+      </div>
+
+      <!-- Комментарий -->
+      <div class="mb-5">
+        <label class="block text-xs font-semibold text-slate-700 mb-1.5">Описание или цитата с ошибкой:</label>
+        <textarea id="report-details" rows="3" class="w-full bg-stone-50 border border-stone-200 text-xs rounded-lg p-2.5 focus:outline-none focus:border-indigo-400 text-slate-800 placeholder-stone-400" placeholder="Укажите, в каком месте текста вы заметили неточность..."></textarea>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 w-full pt-1">
+        <button id="modal-report-cancel" type="button" class="px-4 py-2 rounded-lg text-xs font-semibold text-stone-500 bg-transparent hover:bg-stone-100 transition active:scale-95">
+          Отмена
+        </button>
+        <button id="modal-report-confirm" type="button" class="px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 shadow-xs transition active:scale-95 inline-flex items-center gap-2">
+          <i data-lucide="send" class="w-4 h-4"></i>
+          <span>Отправить замечание</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 8. JS ЛОГИКА ВЗАИМОДЕЙСТВИЯ -->
+  <script>
+    // Инициализация Lucide иконок
+    lucide.createIcons();
+
+    // ==========================================
+    // 1. УПРАВЛЕНИЕ САЙДБАРОМ ОГЛАВЛЕНИЯ
+    // ==========================================
+    const sidebar = document.getElementById('sidebar-toc');
+    const btnToggleSidebar = document.getElementById('btn-toggle-sidebar');
+    const btnCloseSidebar = document.getElementById('btn-close-sidebar');
+    const sidebarOverlay = document.getElementById('sidebar-overlay');
+    const sidebarToggleText = document.getElementById('sidebar-toggle-text');
+    let isSidebarOpen = true;
+
+    function toggleSidebar(forceState = null) {
+      if (forceState !== null) {
+        isSidebarOpen = forceState;
+      } else {
+        isSidebarOpen = !isSidebarOpen;
+      }
+
+      if (isSidebarOpen) {
+        sidebar.style.width = '270px';
+        sidebar.style.transform = 'translateX(0)';
+        sidebar.style.opacity = '1';
+        sidebar.style.pointerEvents = 'auto';
+        if (sidebarToggleText) sidebarToggleText.textContent = "Скрыть";
+        sidebarOverlay.classList.remove('hidden');
+        showToastNotice("Оглавление открыто", 'book-open');
+      } else {
+        sidebar.style.width = '0px';
+        sidebar.style.transform = 'translateX(-100%)';
+        sidebar.style.opacity = '0';
+        sidebar.style.pointerEvents = 'none';
+        if (sidebarToggleText) sidebarToggleText.textContent = "Оглавление";
+        sidebarOverlay.classList.add('hidden');
+        showToastNotice("Режим чтения на весь экран", 'maximize-2');
+      }
+    }
+
+    btnToggleSidebar.addEventListener('click', () => toggleSidebar());
+    btnCloseSidebar.addEventListener('click', () => toggleSidebar(false));
+    sidebarOverlay.addEventListener('click', () => toggleSidebar(false));
+
+    // На мобильных устройствах скрываем оглавление по умолчанию для комфортного чтения
+    if (window.innerWidth < 768) {
+      toggleSidebar(false);
+    }
+
+    // ==========================================
+    // 2. ИЗМЕНЕНИЕ РАЗМЕРА ШРИФТА (A+ / A-)
+    // ==========================================
+    const readerBody = document.getElementById('reader-body');
+    const fontSizes = [
+      { class: 'text-[17px] sm:text-[18px]', name: 'Компактный (18px)' },
+      { class: 'text-[19px] sm:text-[20px]', name: 'Стандартный (20px)' },
+      { class: 'text-[21px] sm:text-[22px]', name: 'Комфортный (22px)' },
+      { class: 'text-[23px] sm:text-[25px]', name: 'Крупный (25px)' },
+      { class: 'text-[26px] sm:text-[28px]', name: 'Максимальный (28px)' }
+    ];
+    let currentFontIndex = 1; // По умолчанию: Стандартный (20px)
+
+    function updateFontSize(newIndex) {
+      if (newIndex < 0 || newIndex >= fontSizes.length) return;
+      
+      // Удаляем все предыдущие классы размеров
+      fontSizes.forEach(item => {
+        item.class.split(' ').forEach(cls => readerBody.classList.remove(cls));
+      });
+
+      currentFontIndex = newIndex;
+      // Добавляем новый класс
+      fontSizes[currentFontIndex].class.split(' ').forEach(cls => readerBody.classList.add(cls));
+
+      showToastNotice(`Размер шрифта: ${fontSizes[currentFontIndex].name}`, 'type');
+    }
+
+    document.getElementById('font-inc').addEventListener('click', () => {
+      if (currentFontIndex < fontSizes.length - 1) {
+        updateFontSize(currentFontIndex + 1);
+      } else {
+        showToastNotice("Достигнут максимальный размер шрифта", 'info');
+      }
+    });
+
+    document.getElementById('font-dec').addEventListener('click', () => {
+      if (currentFontIndex > 0) {
+        updateFontSize(currentFontIndex - 1);
+      } else {
+        showToastNotice("Достигнут минимальный размер шрифта", 'info');
+      }
+    });
+
+    // ==========================================
+    // 3. ИНТЕРАКТИВНЫЙ БЛОК ОЦЕНКИ ЗВЕЗДАМИ
+    // ==========================================
+    const starButtons = document.querySelectorAll('.star-btn');
+    const ratingLabel = document.getElementById('rating-label');
+    let currentRating = 0;
+    let isRatingSaved = false;
+
+    const ratingDescriptions = {
+      1: "1/5 — Слабый перевод, много стилистических шероховатостей",
+      2: "2/5 — Требуется существенная редактура и вычитка стыков",
+      3: "3/5 — Хорошо, но местами теряется авторская интонация",
+      4: "4/5 — Качественный литературный перевод, отличный ритм",
+      5: "5/5 — Превосходно! Безупречный перевод, достоин Канона"
+    };
+
+    function renderStars(activeCount, isHover = false) {
+      starButtons.forEach((btn, idx) => {
+        const starNum = idx + 1;
+        const svg = btn.querySelector('.star-icon');
+        if (starNum <= activeCount) {
+          btn.classList.remove('text-stone-300');
+          btn.classList.add('text-amber-400');
+          svg.setAttribute('fill', '#FBBF24'); // amber-400
+        } else {
+          btn.classList.add('text-stone-300');
+          btn.classList.remove('text-amber-400');
+          svg.setAttribute('fill', 'none');
+        }
+      });
+
+      if (activeCount > 0) {
+        ratingLabel.textContent = ratingDescriptions[activeCount];
+        ratingLabel.className = isHover 
+          ? "text-xs font-semibold text-amber-600 h-6 flex items-center transition-colors"
+          : "text-xs font-bold text-slate-800 h-6 flex items-center transition-colors";
+      } else {
+        ratingLabel.textContent = "Нажмите на звезду, чтобы поставить оценку";
+        ratingLabel.className = "text-xs font-medium text-stone-400 h-6 flex items-center";
+      }
+    }
+
+    starButtons.forEach((btn) => {
+      const starNum = parseInt(btn.getAttribute('data-star'), 10);
+
+      // Наведение мыши
+      btn.addEventListener('mouseenter', () => {
+        renderStars(starNum, true);
+      });
+
+      // Уход мыши
+      btn.addEventListener('mouseleave', () => {
+        renderStars(currentRating, false);
+      });
+
+      // Клик для фиксации оценки
+      btn.addEventListener('click', () => {
+        currentRating = starNum;
+        isRatingSaved = true;
+        renderStars(currentRating, false);
+
+        // Точное требование из ТЗ:
+        // "Оценка 5/5 сохранена! Метрики ветки пересчитаны"
+        showToastNotice(`Оценка ${currentRating}/5 сохранена! Метрики ветки пересчитаны`, 'star', true);
+      });
+    });
+
+    // ==========================================
+    // 4. TOAST УВЕДОМЛЕНИЯ (ИЗ РЕФЕРЕНСА)
+    // ==========================================
+    const toast = document.getElementById('toast');
+    const toastText = document.getElementById('toast-text');
+    const toastIcon = document.getElementById('toast-icon');
+    const toastIconWrapper = document.getElementById('toast-icon-wrapper');
+    let toastTimeout = null;
+
+    function showToastNotice(msg, iconName = 'check', isSuccess = true) {
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastText.textContent = msg;
+      
+      toastIcon.setAttribute('data-lucide', iconName);
+      if (isSuccess) {
+        toastIconWrapper.className = "w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0";
+        toastIcon.className = "w-4 h-4 text-emerald-400";
+      } else {
+        toastIconWrapper.className = "w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center shrink-0";
+        toastIcon.className = "w-4 h-4 text-indigo-400";
+      }
+      lucide.createIcons();
+
+      toast.classList.remove('-translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      
+      toastTimeout = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('-translate-y-20', 'opacity-0');
+      }, 2800);
+    }
+
+    // ==========================================
+    // 5. МОДАЛЬНЫЕ ОКНА: ДОНАТ И ЖАЛОБА
+    // ==========================================
+    const donateModal = document.getElementById('donate-modal');
+    const donateModalCard = document.getElementById('donate-modal-card');
+    const btnDonate = document.getElementById('btn-donate');
+    const modalDonateCancel = document.getElementById('modal-donate-cancel');
+    const modalDonateConfirm = document.getElementById('modal-donate-confirm');
+    let selectedDonationAmount = 300;
+
+    window.selectDonation = function(amount, el) {
+      selectedDonationAmount = amount;
+      document.querySelectorAll('.donate-chip').forEach(chip => {
+        chip.className = "donate-chip py-2 px-3 text-xs font-semibold rounded-lg border border-stone-200 hover:border-amber-400 bg-white hover:bg-amber-50 text-slate-700 transition";
+      });
+      el.className = "donate-chip py-2 px-3 text-xs font-semibold rounded-lg border border-amber-300 bg-amber-50 text-amber-900 transition";
+    };
+
+    function openDonateModal() {
+      donateModal.classList.remove('opacity-0', 'pointer-events-none');
+      donateModal.classList.add('opacity-100');
+      donateModalCard.classList.remove('scale-95');
+      donateModalCard.classList.add('scale-100');
+    }
+
+    function closeDonateModal() {
+      donateModal.classList.remove('opacity-100');
+      donateModal.classList.add('opacity-0', 'pointer-events-none');
+      donateModalCard.classList.remove('scale-100');
+      donateModalCard.classList.add('scale-95');
+    }
+
+    btnDonate.addEventListener('click', openDonateModal);
+    modalDonateCancel.addEventListener('click', closeDonateModal);
+    donateModal.addEventListener('click', (e) => {
+      if (e.target === donateModal) closeDonateModal();
+    });
+
+    modalDonateConfirm.addEventListener('click', () => {
+      closeDonateModal();
+      showToastNotice(`Спасибо за поддержку! Донат ${selectedDonationAmount} ₽ начислен переводчикам ветки`, 'heart');
+    });
+
+    // Модальное окно жалобы
+    const reportModal = document.getElementById('report-modal');
+    const reportModalCard = document.getElementById('report-modal-card');
+    const btnReport = document.getElementById('btn-report');
+    const modalReportCancel = document.getElementById('modal-report-cancel');
+    const modalReportConfirm = document.getElementById('modal-report-confirm');
+    const reportDetails = document.getElementById('report-details');
+
+    function openReportModal() {
+      reportModal.classList.remove('opacity-0', 'pointer-events-none');
+      reportModal.classList.add('opacity-100');
+      reportModalCard.classList.remove('scale-95');
+      reportModalCard.classList.add('scale-100');
+    }
+
+    function closeReportModal() {
+      reportModal.classList.remove('opacity-100');
+      reportModal.classList.add('opacity-0', 'pointer-events-none');
+      reportModalCard.classList.remove('scale-100');
+      reportModalCard.classList.add('scale-95');
+    }
+
+    btnReport.addEventListener('click', openReportModal);
+    modalReportCancel.addEventListener('click', closeReportModal);
+    reportModal.addEventListener('click', (e) => {
+      if (e.target === reportModal) closeReportModal();
+    });
+
+    modalReportConfirm.addEventListener('click', () => {
+      const text = reportDetails.value.trim();
+      closeReportModal();
+      reportDetails.value = '';
+      showToastNotice("Замечание передано бета-ридерам на проверку стыков", 'check-circle');
+    });
+
+    // ==========================================
+    // 6. НАВИГАЦИОННЫЕ КНОПКИ
+    // ==========================================
+    document.getElementById('btn-back-library').addEventListener('click', () => {
+      showToastNotice("Возврат в библиотеку книг...");
+    });
+
+    document.getElementById('btn-next-chapter').addEventListener('click', () => {
+      if (!isRatingSaved) {
+        showToastNotice("Рекомендуем оценить главу перед переходом", 'star', false);
+      }
+      setTimeout(() => {
+        showToastNotice("Загрузка Главы III: «В недрах твердыни»...", 'book-open');
+      }, 500);
+    });
+
+    // ==========================================
+    // 7. ИНДИКАТОР ПРОГРЕССА СКРОЛЛА
+    // ==========================================
+    const scrollContainer = document.getElementById('main-scroll-container');
+    const progressBar = document.getElementById('reading-progress-bar');
+
+    scrollContainer.addEventListener('scroll', () => {
+      const scrollTop = scrollContainer.scrollTop;
+      const scrollHeight = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      if (scrollHeight > 0) {
+        const progress = (scrollTop / scrollHeight) * 100;
+        progressBar.style.width = `${progress}%`;
+      }
+    });
+
+    // Горячие клавиши (Esc для модалок, Стрелка вправо для следующей главы)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!donateModal.classList.contains('opacity-0')) closeDonateModal();
+        if (!reportModal.classList.contains('opacity-0')) closeReportModal();
+      }
+    });
+  </script>
+</body>
+</html>
